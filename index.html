@@ -351,7 +351,7 @@ function renderSongCard(song){
 
   return`
   <div class="song-card" id="card-${song.id}">
-    <div class="song-card-header">
+    <div class="song-card-header" onclick="toggleCard('body-${song.id}',this)" style="cursor:pointer">
       <div class="song-title-area">
         <div class="song-avatar" id="${covId}">🎵</div>
         <div class="song-meta">
@@ -364,13 +364,14 @@ function renderSongCard(song){
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <span class="tag tag-week"><i class="ti ti-calendar" style="font-size:11px"></i>${latest.week||'—'}</span>
-        <button class="btn btn-new-week" onclick="showWeekModal('${song.id}',null)"><i class="ti ti-plus"></i> Nueva semana</button>
-        <button class="btn" style="padding:5px 10px;font-size:12px;color:var(--c2d);background:var(--c2l);border-color:var(--c2l)" onclick="shareWeek('${song.id}','${latest.id}')"><i class="ti ti-share"></i> Compartir</button>
-        <button class="btn" style="padding:5px 10px;font-size:12px" onclick="showSongEditModal('${song.id}')"><i class="ti ti-edit"></i></button>
-        <button class="btn" style="padding:5px 10px;font-size:12px;color:var(--danger)" onclick="deleteSong('${song.id}')"><i class="ti ti-trash"></i></button>
+        <button class="btn btn-new-week" onclick="event.stopPropagation();showWeekModal('${song.id}',null)"><i class="ti ti-plus"></i> Nueva semana</button>
+        <button class="btn" style="padding:5px 10px;font-size:12px;color:var(--c2d);background:var(--c2l);border-color:var(--c2l)" onclick="event.stopPropagation();shareWeek('${song.id}','${latest.id}')"><i class="ti ti-share"></i> Compartir</button>
+        <button class="btn" style="padding:5px 10px;font-size:12px" onclick="event.stopPropagation();showSongEditModal('${song.id}')"><i class="ti ti-edit"></i></button>
+        <button class="btn" style="padding:5px 10px;font-size:12px;color:var(--danger)" onclick="event.stopPropagation();deleteSong('${song.id}')"><i class="ti ti-trash"></i></button>
+        <i class="ti ti-chevron-down" id="chevron-${song.id}" style="font-size:16px;color:var(--muted);transition:transform .2s"></i>
       </div>
     </div>
-    <div class="song-card-body">
+    <div class="song-card-body hidden" id="body-${song.id}">
 
       <div>
         <div class="section-label"><i class="ti ti-flame" style="font-size:14px;color:#BA7517"></i> Tendencia</div>
@@ -439,7 +440,15 @@ function renderSongCard(song){
   </div>`;
 }
 
-function toggleAccordion(header){
+function toggleCard(bodyId,header){
+  const body=document.getElementById(bodyId);
+  const chevron=header.querySelector('[id^="chevron-"]');
+  const isOpen=!body.classList.contains('hidden');
+  body.classList.toggle('hidden');
+  if(chevron)chevron.style.transform=isOpen?'':'rotate(180deg)';
+}
+
+
   header.classList.toggle('open');
   header.nextElementSibling.classList.toggle('open');
 }
@@ -627,7 +636,10 @@ function renderHistory(){
         <div><div style="font-size:13px;font-weight:500">${r.artist} — ${r.song}</div>
         <div class="history-meta">${r.week||'—'}</div>
         <div class="history-trend">${r.trend||'—'}</div></div>
-        <button class="btn" style="font-size:12px;padding:5px 10px" onclick="showWeekModal('${r.songId}','${r.id}')"><i class="ti ti-edit"></i></button>
+        <div style="display:flex;gap:6px">
+          <button class="btn" style="font-size:12px;padding:5px 10px" onclick="showWeekModal('${r.songId}','${r.id}')"><i class="ti ti-edit"></i></button>
+          <button class="btn" style="font-size:12px;padding:5px 10px;color:var(--danger)" onclick="deleteSong('${r.songId}')"><i class="ti ti-trash"></i></button>
+        </div>
       </div>`;
     });
     html+='</div>';
