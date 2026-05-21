@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Music Marketing Dashboard</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:system-ui,sans-serif;background:#f5f5f0;color:#1a1a18;min-height:100vh}
@@ -37,12 +39,14 @@ body{font-family:system-ui,sans-serif;background:#f5f5f0;color:#1a1a18;min-heigh
 .tag{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:3px 8px;border-radius:6px;font-weight:500}
 .tag-week{background:var(--c2l);color:var(--c2d)}
 .tag-trend{background:var(--cal);color:#633806}
-.song-card-body{padding:1.25rem;display:grid;grid-template-columns:1fr 1fr;gap:1.25rem}
-@media(max-width:700px){.song-card-body{grid-template-columns:1fr}.app{grid-template-columns:1fr}.sidebar{position:relative;height:auto}}
+.song-card-body{padding:1.25rem;display:flex;flex-direction:column;gap:1.25rem}
 .section-label{font-size:11px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.5rem;display:flex;align-items:center;gap:6px}
 .trend-box{background:var(--surface);border-radius:8px;padding:.75rem 1rem;font-size:13px;line-height:1.6}
 .trend-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:.5rem}
-.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+/* Data section */
+.data-section{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem}
+@media(max-width:700px){.data-section{grid-template-columns:1fr}}
+.stats-summary{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:1rem}
 .stat-card{background:var(--surface);border-radius:8px;padding:.75rem;text-align:center}
 .stat-platform{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;display:flex;align-items:center;justify-content:center;gap:4px}
 .stat-val{font-size:18px;font-weight:500}
@@ -50,19 +54,26 @@ body{font-family:system-ui,sans-serif;background:#f5f5f0;color:#1a1a18;min-heigh
 .stat-dot{width:7px;height:7px;border-radius:50%;display:inline-block}
 .spotify-dot{background:#1DB954}
 .tiktok-dot{background:#ff0050}
-.videos-section{grid-column:1/-1}
+.chart-wrap{background:var(--surface);border-radius:8px;padding:1rem;margin-top:.5rem}
+.chart-tabs{display:flex;gap:4px;margin-bottom:.75rem}
+.chart-tab{font-size:11px;padding:3px 10px;border-radius:6px;cursor:pointer;border:0.5px solid var(--border);background:var(--card);color:var(--muted)}
+.chart-tab.active{background:var(--c1);color:#fff;border-color:var(--c1)}
+.tiktok-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+/* Videos */
 .videos-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-top:.5rem}
 .video-thumb{border-radius:8px;overflow:hidden;border:0.5px solid var(--border);aspect-ratio:9/16;background:var(--surface);position:relative}
 .video-thumb iframe{width:100%;height:100%;border:none}
 .video-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.08);opacity:0;transition:opacity .2s}
 .video-thumb:hover .video-overlay{opacity:1}
 .video-overlay i{font-size:28px;color:#fff}
+/* Modal */
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:100;padding:1rem}
 .modal{background:var(--card);border-radius:12px;padding:1.5rem;width:100%;max-width:560px;max-height:90vh;overflow-y:auto;border:0.5px solid var(--border)}
 .modal h2{font-size:16px;font-weight:500;margin-bottom:1rem}
 .field{margin-bottom:1rem}
 .field label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
 .field input,.field textarea{width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:8px;background:var(--surface);font-size:13px;color:#1a1a18;font-family:inherit;outline:none;resize:vertical}
+.field input[type=file]{padding:6px 10px;cursor:pointer}
 .field input:focus,.field textarea:focus{border-color:var(--c1)}
 .field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:1rem}
@@ -71,6 +82,7 @@ body{font-family:system-ui,sans-serif;background:#f5f5f0;color:#1a1a18;min-heigh
 .url-row input{flex:1}
 .url-row button{flex-shrink:0;width:30px;height:30px;border:0.5px solid var(--border);border-radius:6px;background:var(--dangerl);color:var(--danger);cursor:pointer;display:flex;align-items:center;justify-content:center}
 .add-url{margin-top:6px;font-size:12px;color:var(--c1);cursor:pointer;display:inline-flex;align-items:center;gap:4px}
+.csv-status{font-size:11px;color:var(--c2d);background:var(--c2l);border-radius:6px;padding:3px 8px;margin-top:4px;display:none}
 .hidden{display:none}
 .empty{text-align:center;padding:3rem 1rem;color:var(--muted)}
 .empty i{font-size:40px;margin-bottom:.75rem;display:block}
@@ -117,7 +129,7 @@ body{font-family:system-ui,sans-serif;background:#f5f5f0;color:#1a1a18;min-heigh
       </div>
       <div class="week-badge">
         <i class="ti ti-calendar" style="font-size:14px;color:var(--c1d)"></i>
-        <input type="text" id="weekLabel" value="Semana 20 · Mayo 2025">
+        <input type="text" id="weekLabel" value="Semana 21 · Mayo 2026">
       </div>
     </div>
 
@@ -152,16 +164,18 @@ body{font-family:system-ui,sans-serif;background:#f5f5f0;color:#1a1a18;min-heigh
       <div class="field"><label>Artista</label><input type="text" id="fArtist" placeholder="Cano"></div>
       <div class="field"><label>Canción</label><input type="text" id="fSong" placeholder="Así Nací y Así Moriré"></div>
     </div>
-    <div class="field"><label>Semana / Fecha</label><input type="text" id="fWeek" placeholder="Semana 20 · Mayo 2025"></div>
+    <div class="field"><label>Semana / Fecha</label><input type="text" id="fWeek" placeholder="Semana 21 · Mayo 2026"></div>
     <div class="field"><label>Tendencia (descripción)</label><textarea id="fTrend" rows="3" placeholder="Fotos con tu pareja con la letra..."></textarea></div>
     <div class="field"><label>Etiquetas de tendencia (separadas por comas)</label><input type="text" id="fTags" placeholder="carrusel fotos, ugc, pareja, romántico"></div>
-    <div class="field-row">
-      <div class="field"><label>Spotify streams/día</label><input type="text" id="fSpotDay" placeholder=">3k"></div>
-      <div class="field"><label>Spotify streams/semana</label><input type="text" id="fSpotWeek" placeholder=">21k"></div>
+    <div class="field">
+      <label>CSV Spotify (streams diarios)</label>
+      <input type="file" id="fSpotifyCSV" accept=".csv" onchange="handleSpotifyCSV(this)">
+      <div class="csv-status" id="spotifyCSVStatus"></div>
     </div>
-    <div class="field-row">
-      <div class="field"><label>TikTok creaciones/día</label><input type="text" id="fTikDay" placeholder=">3k"></div>
-      <div class="field"><label>TikTok creaciones/semana</label><input type="text" id="fTikWeek" placeholder=">21k"></div>
+    <div class="field">
+      <label>CSV TikTok (creaciones)</label>
+      <input type="file" id="fTikTokCSV" accept=".csv" onchange="handleTikTokCSV(this)">
+      <div class="csv-status" id="tiktokCSVStatus"></div>
     </div>
     <div class="field"><label>Link de insights (opcional)</label><input type="text" id="fInsights" placeholder="https://insights.sonymusic.com/..."></div>
     <div class="field">
@@ -179,10 +193,51 @@ body{font-family:system-ui,sans-serif;background:#f5f5f0;color:#1a1a18;min-heigh
 <script>
 let db=JSON.parse(localStorage.getItem('musicDB')||'[]');
 let editId=null,currentView='weekly';
+let pendingSpotifyData=null,pendingTikTokData=null;
+const charts={};
 
 function save(){localStorage.setItem('musicDB',JSON.stringify(db))}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2)}
+function fmtNum(n){if(!n&&n!==0)return'—';if(n>=1000000)return(n/1000000).toFixed(1)+'M';if(n>=1000)return Math.round(n/1000)+'k';return n.toString()}
 
+// ── CSV PARSING ──────────────────────────────────────────────────────
+function handleSpotifyCSV(input){
+  const file=input.files[0];if(!file)return;
+  Papa.parse(file,{header:true,skipEmptyLines:true,complete:r=>{
+    const rows=r.data;
+    const data=rows.map(row=>({
+      date:row['Date']||row['date']||'',
+      streams:parseInt(row['Spotify']||row['spotify']||0)||0
+    })).filter(d=>d.date&&d.streams>0);
+    data.sort((a,b)=>new Date(a.date)-new Date(b.date));
+    pendingSpotifyData=data;
+    const total=data.reduce((s,d)=>s+d.streams,0);
+    const avg=Math.round(total/data.length);
+    const st=document.getElementById('spotifyCSVStatus');
+    st.style.display='block';
+    st.textContent=`✓ ${data.length} días · Total: ${fmtNum(total)} streams · Media: ${fmtNum(avg)}/día`;
+  }});
+}
+function handleTikTokCSV(input){
+  const file=input.files[0];if(!file)return;
+  Papa.parse(file,{header:true,skipEmptyLines:true,complete:r=>{
+    const row=r.data[0]||{};
+    pendingTikTokData={
+      views:parseInt(row['Views']||row['views']||0)||0,
+      creations:parseInt(row['Creations']||row['creations']||0)||0,
+      favorites:parseInt(row['Favorites']||row['favorites']||0)||0,
+      shares:parseInt(row['Shares']||row['shares']||0)||0,
+      likes:parseInt(row['Likes']||row['likes']||0)||0,
+      comments:parseInt(row['Comments']||row['comments']||0)||0,
+      period:row['Time Period']||row['time period']||''
+    };
+    const st=document.getElementById('tiktokCSVStatus');
+    st.style.display='block';
+    st.textContent=`✓ ${fmtNum(pendingTikTokData.creations)} creaciones · ${fmtNum(pendingTikTokData.views)} views`;
+  }});
+}
+
+// ── COVER ────────────────────────────────────────────────────────────
 async function fetchCover(artist,song){
   const key=`cover_${artist}_${song}`,cached=sessionStorage.getItem(key);
   if(cached)return cached;
@@ -194,13 +249,43 @@ async function fetchCover(artist,song){
   }catch{return''}
 }
 
+// ── CHART ────────────────────────────────────────────────────────────
+function renderSpotifyChart(canvasId,data,mode){
+  if(charts[canvasId])charts[canvasId].destroy();
+  const labels=data.map(d=>{const dt=new Date(d.date);return`${dt.getDate()}/${dt.getMonth()+1}`;});
+  let values=data.map(d=>d.streams);
+  if(mode==='acum'){let acc=0;values=values.map(v=>(acc+=v,acc));}
+  const color=mode==='diario'?'#1DB954':'#7F77DD';
+  const ctx=document.getElementById(canvasId).getContext('2d');
+  charts[canvasId]=new Chart(ctx,{
+    type:'line',
+    data:{labels,datasets:[{data:values,borderColor:color,backgroundColor:color+'22',fill:true,tension:.3,pointRadius:2,pointHoverRadius:5}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+fmtNum(c.raw)+' streams'}}},scales:{x:{ticks:{font:{size:10},maxTicksLimit:7},grid:{display:false}},y:{ticks:{font:{size:10},callback:v=>fmtNum(v)},grid:{color:'#e2e0d833'}}}}
+  });
+}
+
+// ── RENDER CARD ──────────────────────────────────────────────────────
 function renderSongCard(e){
   const videos=(e.videos||[]).filter(Boolean),tags=(e.tags||[]).filter(Boolean),covId=`cover-${e.id}`;
+  const hasSpotify=e.spotifyData&&e.spotifyData.length>0;
+  const hasTikTok=e.tiktokData&&e.tiktokData.creations>0;
+  const chartId=`chart-${e.id}`;
+
+  // Spotify summary stats
+  let spotTotal=0,spotAvg=0,spotMax=0;
+  if(hasSpotify){
+    spotTotal=e.spotifyData.reduce((s,d)=>s+d.streams,0);
+    spotAvg=Math.round(spotTotal/e.spotifyData.length);
+    spotMax=Math.max(...e.spotifyData.map(d=>d.streams));
+  }
+
   setTimeout(async()=>{
     const url=await fetchCover(e.artist,e.song);
     const el=document.getElementById(covId);
     if(el&&url)el.innerHTML=`<img src="${url}" style="width:100%;height:100%;object-fit:cover;border-radius:8px" alt="portada">`;
+    if(hasSpotify)renderSpotifyChart(chartId,e.spotifyData,'diario');
   },0);
+
   return `
   <div class="song-card" id="card-${e.id}">
     <div class="song-card-header">
@@ -220,22 +305,51 @@ function renderSongCard(e){
         <div class="section-label"><i class="ti ti-flame" style="font-size:14px;color:#BA7517"></i> Tendencia</div>
         <div class="trend-box">${e.trend||'—'}${tags.length?`<div class="trend-tags">${tags.map(t=>`<span class="tag tag-trend">${t.trim()}</span>`).join('')}</div>`:''}</div>
       </div>
-      <div>
-        <div class="section-label"><i class="ti ti-chart-line" style="font-size:14px;color:var(--c1)"></i> Datos de crecimiento</div>
-        <div class="stats-grid">
-          <div class="stat-card"><div class="stat-platform"><span class="stat-dot spotify-dot"></span>Spotify</div><div class="stat-val" style="color:#1DB954">${e.spotDay||'—'}</div><div class="stat-label">streams/día</div></div>
-          <div class="stat-card"><div class="stat-platform"><span class="stat-dot spotify-dot"></span>Spotify</div><div class="stat-val" style="color:#1DB954">${e.spotWeek||'—'}</div><div class="stat-label">streams/semana</div></div>
-          <div class="stat-card"><div class="stat-platform"><span class="stat-dot tiktok-dot"></span>TikTok</div><div class="stat-val" style="color:#ff0050">${e.tikDay||'—'}</div><div class="stat-label">creaciones/día</div></div>
-          <div class="stat-card"><div class="stat-platform"><span class="stat-dot tiktok-dot"></span>TikTok</div><div class="stat-val" style="color:#ff0050">${e.tikWeek||'—'}</div><div class="stat-label">creaciones/semana</div></div>
+
+      <div class="data-section">
+        <!-- SPOTIFY -->
+        <div>
+          <div class="section-label"><span class="stat-dot spotify-dot"></span> Spotify</div>
+          ${hasSpotify?`
+          <div class="stats-summary">
+            <div class="stat-card"><div class="stat-val" style="color:#1DB954">${fmtNum(spotTotal)}</div><div class="stat-label">streams totales</div></div>
+            <div class="stat-card"><div class="stat-val" style="color:#1DB954">${fmtNum(spotAvg)}</div><div class="stat-label">media/día</div></div>
+            <div class="stat-card" style="grid-column:1/-1"><div class="stat-val" style="color:#1DB954">${fmtNum(spotMax)}</div><div class="stat-label">pico máximo diario</div></div>
+          </div>
+          <div class="chart-wrap">
+            <div class="chart-tabs">
+              <div class="chart-tab active" onclick="switchChart('${chartId}','diario','${e.id}',this)">Diario</div>
+              <div class="chart-tab" onclick="switchChart('${chartId}','acum','${e.id}',this)">Acumulado</div>
+            </div>
+            <div style="height:140px"><canvas id="${chartId}"></canvas></div>
+          </div>`
+          :`<div style="background:var(--surface);border-radius:8px;padding:1rem;font-size:12px;color:var(--muted);text-align:center"><i class="ti ti-upload" style="display:block;font-size:24px;margin-bottom:.5rem"></i>Sube el CSV de Spotify al editar</div>`}
+          ${e.insights?`<a href="${e.insights}" target="_blank" style="font-size:12px;color:var(--c1);display:inline-flex;align-items:center;gap:4px;margin-top:8px"><i class="ti ti-external-link" style="font-size:13px"></i>Ver insights</a>`:''}
         </div>
-        ${e.insights?`<a href="${e.insights}" target="_blank" style="font-size:12px;color:var(--c1);display:inline-flex;align-items:center;gap:4px;margin-top:8px"><i class="ti ti-external-link" style="font-size:13px"></i>Ver insights</a>`:''}
+
+        <!-- TIKTOK -->
+        <div>
+          <div class="section-label"><span class="stat-dot tiktok-dot"></span> TikTok${hasTikTok&&e.tiktokData.period?` <span style="font-weight:400;text-transform:none;letter-spacing:0">${e.tiktokData.period}</span>`:''}</div>
+          ${hasTikTok?`
+          <div class="tiktok-stats">
+            <div class="stat-card"><div class="stat-val" style="color:#ff0050">${fmtNum(e.tiktokData.creations)}</div><div class="stat-label">creaciones</div></div>
+            <div class="stat-card"><div class="stat-val" style="color:#ff0050">${fmtNum(e.tiktokData.views)}</div><div class="stat-label">views</div></div>
+            <div class="stat-card"><div class="stat-val" style="color:#ff0050">${fmtNum(e.tiktokData.likes)}</div><div class="stat-label">likes</div></div>
+            <div class="stat-card"><div class="stat-val" style="color:#ff0050">${fmtNum(e.tiktokData.shares)}</div><div class="stat-label">shares</div></div>
+            <div class="stat-card"><div class="stat-val" style="color:#ff0050">${fmtNum(e.tiktokData.favorites)}</div><div class="stat-label">favoritos</div></div>
+            <div class="stat-card"><div class="stat-val" style="color:#ff0050">${fmtNum(e.tiktokData.comments)}</div><div class="stat-label">comentarios</div></div>
+          </div>`
+          :`<div style="background:var(--surface);border-radius:8px;padding:1rem;font-size:12px;color:var(--muted);text-align:center"><i class="ti ti-upload" style="display:block;font-size:24px;margin-bottom:.5rem"></i>Sube el CSV de TikTok al editar</div>`}
+        </div>
       </div>
-      ${videos.length?`<div class="videos-section">
+
+      ${videos.length?`
+      <div>
         <div class="section-label"><i class="ti ti-brand-tiktok" style="font-size:14px;color:#ff0050"></i> Ejemplos</div>
         <div class="videos-grid">${videos.map(v=>{
           const m=v.match(/tiktok\.com\/@([^/]+)\/(video|photo)\/(\d+)/);
           return m
-            ?`<div class="video-thumb"><iframe src="https://www.tiktok.com/embed/v2/${m[3]}" allowfullscreen scrolling="no" allow="encrypted-media;autoplay"></iframe><a href="${v}" target="_blank" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center"><div class="video-overlay"><i class="ti ti-external-link"></i></div></a></div>`
+            ?`<div class="video-thumb"><iframe src="https://www.tiktok.com/embed/v2/${m[3]}" allowfullscreen scrolling="no" allow="encrypted-media;autoplay"></iframe><a href="${v}" target="_blank" style="position:absolute;inset:0"><div class="video-overlay"><i class="ti ti-external-link"></i></div></a></div>`
             :`<a href="${v}" target="_blank" style="border:0.5px solid var(--border);border-radius:8px;padding:.5rem;font-size:12px;color:var(--c1);display:flex;align-items:center;gap:6px"><i class="ti ti-external-link"></i>${v.slice(0,40)}...</a>`;
         }).join('')}</div>
       </div>`:''}
@@ -243,6 +357,14 @@ function renderSongCard(e){
   </div>`;
 }
 
+function switchChart(chartId,mode,entryId,el){
+  el.closest('.chart-tabs').querySelectorAll('.chart-tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  const e=db.find(x=>x.id===entryId);
+  if(e&&e.spotifyData)renderSpotifyChart(chartId,e.spotifyData,mode);
+}
+
+// ── SHARE ────────────────────────────────────────────────────────────
 function shareEntry(id){
   const e=db.find(x=>x.id===id);if(!e)return;
   const encoded=btoa(unescape(encodeURIComponent(JSON.stringify(e))));
@@ -255,6 +377,7 @@ function showToast(msg){
   t.textContent=msg;t.style.opacity='1';clearTimeout(t._timer);t._timer=setTimeout(()=>t.style.opacity='0',2500);
 }
 
+// ── SHARE VIEW ───────────────────────────────────────────────────────
 function checkShareMode(){
   const hash=location.hash;
   if(!hash.startsWith('#share='))return false;
@@ -266,79 +389,110 @@ function checkShareMode(){
 }
 function renderShareView(e){
   const videos=(e.videos||[]).filter(Boolean),tags=(e.tags||[]).filter(Boolean);
-  return `<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:system-ui,sans-serif;background:#f5f5f0;min-height:100vh;padding:2rem 1rem}
-  :root{--c1:#7F77DD;--c1l:#EEEDFE;--c1d:#3C3489;--c2:#1D9E75;--c2l:#E1F5EE;--c2d:#085041;--cal:#FAEEDA;--border:#e2e0d8;--card:#fff;--surface:#f1efe8;--muted:#888780}
+  const hasSpotify=e.spotifyData&&e.spotifyData.length>0;
+  const hasTikTok=e.tiktokData&&e.tiktokData.creations>0;
+  let spotTotal=0,spotAvg=0,spotMax=0;
+  if(hasSpotify){spotTotal=e.spotifyData.reduce((s,d)=>s+d.streams,0);spotAvg=Math.round(spotTotal/e.spotifyData.length);spotMax=Math.max(...e.spotifyData.map(d=>d.streams));}
+  function fn(n){if(!n&&n!==0)return'—';if(n>=1000000)return(n/1000000).toFixed(1)+'M';if(n>=1000)return Math.round(n/1000)+'k';return n.toString();}
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>${e.song} — ${e.artist}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"><\/script>
+  <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:system-ui,sans-serif;background:#f5f5f0;padding:2rem 1rem}
+  :root{--c1:#7F77DD;--c1l:#EEEDFE;--c2l:#E1F5EE;--c2d:#085041;--cal:#FAEEDA;--border:#e2e0d8;--card:#fff;--surface:#f1efe8;--muted:#888780}
   .wrap{max-width:720px;margin:0 auto}.brand{font-size:13px;color:var(--muted);margin-bottom:1.5rem;display:flex;align-items:center;gap:6px}
   .card{background:var(--card);border:0.5px solid var(--border);border-radius:12px;overflow:hidden}
   .card-header{padding:1rem 1.25rem;border-bottom:0.5px solid var(--border);display:flex;align-items:center;gap:12px}
   .avatar{width:48px;height:48px;border-radius:8px;background:var(--c1l);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;overflow:hidden}
-  .song-name{font-size:17px;font-weight:500}.song-artist{font-size:13px;color:var(--muted);margin-top:2px}
-  .tag{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:3px 8px;border-radius:6px;font-weight:500}
-  .tag-week{background:var(--c2l);color:var(--c2d)}.tag-trend{background:var(--cal);color:#633806}
-  .card-body{padding:1.25rem;display:grid;grid-template-columns:1fr 1fr;gap:1.25rem}
-  @media(max-width:600px){.card-body{grid-template-columns:1fr}}
+  .body{padding:1.25rem;display:flex;flex-direction:column;gap:1.25rem}
   .section-label{font-size:11px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.5rem;display:flex;align-items:center;gap:6px}
   .trend-box{background:var(--surface);border-radius:8px;padding:.75rem 1rem;font-size:13px;line-height:1.6}
+  .tag{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:3px 8px;border-radius:6px;font-weight:500}
+  .tag-week{background:var(--c2l);color:var(--c2d)}.tag-trend{background:var(--cal);color:#633806}
   .trend-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:.5rem}
-  .stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .data-section{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem}
+  @media(max-width:600px){.data-section{grid-template-columns:1fr}}
+  .stats-summary,.tiktok-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:1rem}
   .stat-card{background:var(--surface);border-radius:8px;padding:.75rem;text-align:center}
-  .stat-platform{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;display:flex;align-items:center;justify-content:center;gap:4px}
   .stat-val{font-size:18px;font-weight:500}.stat-label{font-size:11px;color:var(--muted);margin-top:2px}
   .stat-dot{width:7px;height:7px;border-radius:50%;display:inline-block}.spotify-dot{background:#1DB954}.tiktok-dot{background:#ff0050}
-  .videos-section{grid-column:1/-1}.videos-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:.5rem}
+  .chart-wrap{background:var(--surface);border-radius:8px;padding:1rem}
+  .chart-tabs{display:flex;gap:4px;margin-bottom:.75rem}
+  .chart-tab{font-size:11px;padding:3px 10px;border-radius:6px;cursor:pointer;border:0.5px solid var(--border);background:var(--card);color:var(--muted)}
+  .chart-tab.active{background:#7F77DD;color:#fff;border-color:#7F77DD}
+  .videos-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:.5rem}
   .video-thumb{border-radius:8px;overflow:hidden;border:0.5px solid var(--border);aspect-ratio:9/16;background:var(--surface);position:relative}
   .video-thumb iframe{width:100%;height:100%;border:none}
   .video-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.08);opacity:0;transition:opacity .2s}
   .video-thumb:hover .video-overlay{opacity:1}.video-overlay i{font-size:28px;color:#fff}
-  </style>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+  </style></head><body>
   <div class="wrap">
-    <div class="brand"><i class="ti ti-music" style="color:var(--c1)"></i> Music Trends · Informe semanal</div>
+    <div class="brand"><i class="ti ti-music" style="color:#7F77DD"></i> Music Trends · Informe semanal</div>
     <div class="card">
       <div class="card-header">
         <div class="avatar" id="share-cover">🎵</div>
-        <div style="flex:1"><div class="song-name">${e.song}</div><div class="song-artist">${e.artist}</div></div>
+        <div style="flex:1"><div style="font-size:17px;font-weight:500">${e.song}</div><div style="font-size:13px;color:var(--muted);margin-top:2px">${e.artist}</div></div>
         <span class="tag tag-week">${e.week||'—'}</span>
       </div>
-      <div class="card-body">
+      <div class="body">
         <div>
           <div class="section-label"><i class="ti ti-flame" style="font-size:14px;color:#BA7517"></i> Tendencia</div>
           <div class="trend-box">${e.trend||'—'}${tags.length?`<div class="trend-tags">${tags.map(t=>`<span class="tag tag-trend">${t.trim()}</span>`).join('')}</div>`:''}</div>
         </div>
-        <div>
-          <div class="section-label"><i class="ti ti-chart-line" style="font-size:14px;color:var(--c1)"></i> Datos de crecimiento</div>
-          <div class="stats-grid">
-            <div class="stat-card"><div class="stat-platform"><span class="stat-dot spotify-dot"></span>Spotify</div><div class="stat-val" style="color:#1DB954">${e.spotDay||'—'}</div><div class="stat-label">streams/día</div></div>
-            <div class="stat-card"><div class="stat-platform"><span class="stat-dot spotify-dot"></span>Spotify</div><div class="stat-val" style="color:#1DB954">${e.spotWeek||'—'}</div><div class="stat-label">streams/semana</div></div>
-            <div class="stat-card"><div class="stat-platform"><span class="stat-dot tiktok-dot"></span>TikTok</div><div class="stat-val" style="color:#ff0050">${e.tikDay||'—'}</div><div class="stat-label">creaciones/día</div></div>
-            <div class="stat-card"><div class="stat-platform"><span class="stat-dot tiktok-dot"></span>TikTok</div><div class="stat-val" style="color:#ff0050">${e.tikWeek||'—'}</div><div class="stat-label">creaciones/semana</div></div>
+        <div class="data-section">
+          <div>
+            <div class="section-label"><span class="stat-dot spotify-dot"></span> Spotify</div>
+            ${hasSpotify?`<div class="stats-summary">
+              <div class="stat-card"><div class="stat-val" style="color:#1DB954">${fn(spotTotal)}</div><div class="stat-label">streams totales</div></div>
+              <div class="stat-card"><div class="stat-val" style="color:#1DB954">${fn(spotAvg)}</div><div class="stat-label">media/día</div></div>
+              <div class="stat-card" style="grid-column:1/-1"><div class="stat-val" style="color:#1DB954">${fn(spotMax)}</div><div class="stat-label">pico máximo diario</div></div>
+            </div>
+            <div class="chart-wrap">
+              <div class="chart-tabs">
+                <div class="chart-tab active" onclick="swC('diario',this)">Diario</div>
+                <div class="chart-tab" onclick="swC('acum',this)">Acumulado</div>
+              </div>
+              <div style="height:140px"><canvas id="sc"></canvas></div>
+            </div>`:'<div style="background:var(--surface);border-radius:8px;padding:1rem;font-size:12px;color:var(--muted);text-align:center">Sin datos</div>'}
           </div>
-          ${e.insights?`<a href="${e.insights}" target="_blank" style="font-size:12px;color:var(--c1);display:inline-flex;align-items:center;gap:4px;margin-top:8px"><i class="ti ti-external-link" style="font-size:13px"></i>Ver insights</a>`:''}
+          <div>
+            <div class="section-label"><span class="stat-dot tiktok-dot"></span> TikTok${hasTikTok&&e.tiktokData.period?` <span style="font-weight:400;text-transform:none;letter-spacing:0">${e.tiktokData.period}</span>`:''}</div>
+            ${hasTikTok?`<div class="tiktok-stats">
+              <div class="stat-card"><div class="stat-val" style="color:#ff0050">${fn(e.tiktokData.creations)}</div><div class="stat-label">creaciones</div></div>
+              <div class="stat-card"><div class="stat-val" style="color:#ff0050">${fn(e.tiktokData.views)}</div><div class="stat-label">views</div></div>
+              <div class="stat-card"><div class="stat-val" style="color:#ff0050">${fn(e.tiktokData.likes)}</div><div class="stat-label">likes</div></div>
+              <div class="stat-card"><div class="stat-val" style="color:#ff0050">${fn(e.tiktokData.shares)}</div><div class="stat-label">shares</div></div>
+              <div class="stat-card"><div class="stat-val" style="color:#ff0050">${fn(e.tiktokData.favorites)}</div><div class="stat-label">favoritos</div></div>
+              <div class="stat-card"><div class="stat-val" style="color:#ff0050">${fn(e.tiktokData.comments)}</div><div class="stat-label">comentarios</div></div>
+            </div>`:'<div style="background:var(--surface);border-radius:8px;padding:1rem;font-size:12px;color:var(--muted);text-align:center">Sin datos</div>'}
+          </div>
         </div>
-        ${videos.length?`<div class="videos-section">
+        ${videos.length?`<div>
           <div class="section-label"><i class="ti ti-brand-tiktok" style="font-size:14px;color:#ff0050"></i> Ejemplos</div>
-          <div class="videos-grid">${videos.map(v=>{
-            const m=v.match(/tiktok\.com\/@([^/]+)\/(video|photo)\/(\d+)/);
-            return m?`<div class="video-thumb"><iframe src="https://www.tiktok.com/embed/v2/${m[3]}" allowfullscreen scrolling="no" allow="encrypted-media;autoplay"></iframe><a href="${v}" target="_blank" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center"><div class="video-overlay"><i class="ti ti-external-link"></i></div></a></div>`
-            :`<a href="${v}" target="_blank" style="border:0.5px solid var(--border);border-radius:8px;padding:.5rem;font-size:12px;color:var(--c1);display:flex;align-items:center;gap:6px"><i class="ti ti-external-link"></i>${v.slice(0,40)}...</a>`;
-          }).join('')}</div>
+          <div class="videos-grid">${videos.map(v=>{const m=v.match(/tiktok\.com\/@([^/]+)\/(video|photo)\/(\d+)/);return m?`<div class="video-thumb"><iframe src="https://www.tiktok.com/embed/v2/${m[3]}" allowfullscreen scrolling="no" allow="encrypted-media;autoplay"></iframe><a href="${v}" target="_blank" style="position:absolute;inset:0"><div class="video-overlay"><i class="ti ti-external-link"></i></div></a></div>`:''}).join('')}</div>
         </div>`:''}
       </div>
     </div>
   </div>
   <script>
-  (async()=>{
-    try{
-      const r=await fetch('https://itunes.apple.com/search?term='+encodeURIComponent('${e.artist} ${e.song}')+'&media=music&limit=1');
-      const d=await r.json();
-      const url=d.results?.[0]?.artworkUrl100?.replace('100x100','300x300')||'';
-      const el=document.getElementById('share-cover');
-      if(el&&url)el.innerHTML='<img src="'+url+'" style="width:100%;height:100%;object-fit:cover;border-radius:8px" alt="portada">';
-    }catch{}
-  })();
-  <\/script>`;
+  const spotData=${hasSpotify?JSON.stringify(e.spotifyData):'[]'};
+  let sc=null;
+  function fn(n){if(!n&&n!==0)return'—';if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1000)return Math.round(n/1000)+'k';return n.toString();}
+  function drawChart(mode){
+    if(sc)sc.destroy();
+    const labels=spotData.map(d=>{const dt=new Date(d.date);return dt.getDate()+'/'+(dt.getMonth()+1);});
+    let vals=spotData.map(d=>d.streams);
+    if(mode==='acum'){let a=0;vals=vals.map(v=>(a+=v,a));}
+    const color=mode==='diario'?'#1DB954':'#7F77DD';
+    sc=new Chart(document.getElementById('sc').getContext('2d'),{type:'line',data:{labels,datasets:[{data:vals,borderColor:color,backgroundColor:color+'22',fill:true,tension:.3,pointRadius:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+fn(c.raw)+' streams'}}},scales:{x:{ticks:{font:{size:10},maxTicksLimit:7},grid:{display:false}},y:{ticks:{font:{size:10},callback:v=>fn(v)},grid:{color:'#e2e0d833'}}}}});
+  }
+  function swC(mode,el){document.querySelectorAll('.chart-tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');drawChart(mode);}
+  if(spotData.length)drawChart('diario');
+  (async()=>{try{const r=await fetch('https://itunes.apple.com/search?term='+encodeURIComponent('${e.artist} ${e.song}')+'&media=music&limit=1');const d=await r.json();const url=d.results?.[0]?.artworkUrl100?.replace('100x100','300x300')||'';const el=document.getElementById('share-cover');if(el&&url)el.innerHTML='<img src="'+url+'" style="width:100%;height:100%;object-fit:cover;border-radius:8px">';}catch{}})();
+  <\/script></body></html>`;
 }
 
+// ── VIEWS ────────────────────────────────────────────────────────────
 function renderWeekly(){
   const week=document.getElementById('weekLabel').value.trim();
   const entries=db.filter(e=>e.week===week);
@@ -406,29 +560,39 @@ function switchView(view,el){
   document.getElementById('historyView').classList.toggle('hidden',view!=='history');
   if(view==='history'){populateHistoryFilters();renderHistory();}
 }
+
+// ── MODAL ────────────────────────────────────────────────────────────
 function showAddModal(){
-  editId=null;
+  editId=null;pendingSpotifyData=null;pendingTikTokData=null;
   document.getElementById('modalTitle').textContent='Nueva canción';
-  ['fArtist','fSong','fWeek','fTrend','fTags','fSpotDay','fSpotWeek','fTikDay','fTikWeek','fInsights'].forEach(id=>{document.getElementById(id).value='';});
+  ['fArtist','fSong','fWeek','fTrend','fTags','fInsights'].forEach(id=>{document.getElementById(id).value='';});
   document.getElementById('fWeek').value=document.getElementById('weekLabel').value;
+  document.getElementById('fSpotifyCSV').value='';
+  document.getElementById('fTikTokCSV').value='';
+  document.getElementById('spotifyCSVStatus').style.display='none';
+  document.getElementById('tiktokCSVStatus').style.display='none';
   document.getElementById('urlList').innerHTML='';
   addUrlField();
   document.getElementById('modalBg').classList.remove('hidden');
 }
 function editEntry(id){
   const e=db.find(x=>x.id===id);if(!e)return;
-  editId=id;
+  editId=id;pendingSpotifyData=e.spotifyData||null;pendingTikTokData=e.tiktokData||null;
   document.getElementById('modalTitle').textContent='Editar canción';
   document.getElementById('fArtist').value=e.artist||'';
   document.getElementById('fSong').value=e.song||'';
   document.getElementById('fWeek').value=e.week||'';
   document.getElementById('fTrend').value=e.trend||'';
   document.getElementById('fTags').value=(e.tags||[]).join(', ');
-  document.getElementById('fSpotDay').value=e.spotDay||'';
-  document.getElementById('fSpotWeek').value=e.spotWeek||'';
-  document.getElementById('fTikDay').value=e.tikDay||'';
-  document.getElementById('fTikWeek').value=e.tikWeek||'';
   document.getElementById('fInsights').value=e.insights||'';
+  document.getElementById('fSpotifyCSV').value='';
+  document.getElementById('fTikTokCSV').value='';
+  const ss=document.getElementById('spotifyCSVStatus');
+  const ts=document.getElementById('tiktokCSVStatus');
+  if(e.spotifyData?.length){ss.style.display='block';ss.textContent=`✓ ${e.spotifyData.length} días cargados`;}
+  else ss.style.display='none';
+  if(e.tiktokData?.creations){ts.style.display='block';ts.textContent=`✓ ${fmtNum(e.tiktokData.creations)} creaciones cargadas`;}
+  else ts.style.display='none';
   document.getElementById('urlList').innerHTML='';
   (e.videos||['']).forEach(v=>addUrlField(v));
   document.getElementById('modalBg').classList.remove('hidden');
@@ -447,11 +611,9 @@ function saveEntry(){
     week:document.getElementById('fWeek').value.trim(),
     trend:document.getElementById('fTrend').value.trim(),
     tags:document.getElementById('fTags').value.split(',').map(t=>t.trim()).filter(Boolean),
-    spotDay:document.getElementById('fSpotDay').value.trim(),
-    spotWeek:document.getElementById('fSpotWeek').value.trim(),
-    tikDay:document.getElementById('fTikDay').value.trim(),
-    tikWeek:document.getElementById('fTikWeek').value.trim(),
     insights:document.getElementById('fInsights').value.trim(),
+    spotifyData:pendingSpotifyData||null,
+    tiktokData:pendingTikTokData||null,
     videos:[...document.querySelectorAll('#urlList input')].map(i=>i.value.trim()).filter(Boolean)
   };
   if(!entry.artist||!entry.song){alert('Artista y canción son obligatorios');return;}
@@ -465,11 +627,11 @@ function renderAll(){renderWeekly();renderSidebar();if(currentView==='history'){
 document.getElementById('weekLabel').addEventListener('change',renderWeekly);
 
 if(!db.length){
-  db=[{id:uid(),artist:'Cano',song:'Así Nací y Así Moriré',week:'Semana 20 · Mayo 2025',
+  db=[{id:uid(),artist:'Cano',song:'Así Nací y Así Moriré',week:'Semana 21 · Mayo 2026',
     trend:'Fotos con tu pareja con la letra "Siendo tú mi lugar favorito, tengo más de lo que necesito" y copys románticos en general, ej "Siempre busqué a alguien como tú". Se usa tanto sonidos UGC como el oficial.',
     tags:['carrusel fotos','ugc','pareja','romántico'],
-    spotDay:'>3k',spotWeek:'',tikDay:'>3k',tikWeek:'',
     insights:'https://insights.sonymusic.com/song/ES5022600132/tiktok?country=ES',
+    spotifyData:null,tiktokData:null,
     videos:['https://www.tiktok.com/@brunoflorenciano/photo/7636402153451506947','https://www.tiktok.com/@087008i/photo/7638408042626764054','https://www.tiktok.com/@55grccc/photo/7636706227657116930','https://www.tiktok.com/@marinaglvz02/photo/7637650040839818518']
   }];save();
 }
