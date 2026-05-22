@@ -102,9 +102,6 @@ body{font-family:system-ui,sans-serif;background:#f5f5f0;color:#1a1a18;min-heigh
 .no-data{background:var(--surface);border-radius:8px;padding:1rem;font-size:12px;color:var(--muted);text-align:center}
 .history-filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:1.5rem}
 .history-filters select{padding:7px 10px;border:0.5px solid var(--border);border-radius:8px;background:var(--surface);font-size:13px;color:#1a1a18;outline:none}
-.timeline-group{margin-bottom:2rem}
-.timeline-group-title{font-size:13px;font-weight:500;color:var(--muted);margin-bottom:.75rem;display:flex;align-items:center;gap:8px}
-.timeline-group-title::after{content:'';flex:1;height:0.5px;background:var(--border)}
 .history-row{background:var(--card);border:0.5px solid var(--border);border-radius:10px;padding:.75rem 1rem;margin-bottom:.5rem;display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center}
 .history-week-dot{width:32px;height:32px;border-radius:50%;background:var(--c1l);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;color:var(--c1d);flex-shrink:0}
 .history-meta{font-size:12px;color:var(--muted);margin-top:2px}
@@ -158,7 +155,7 @@ body{font-family:system-ui,sans-serif;background:#f5f5f0;color:#1a1a18;min-heigh
       </div>
       <div class="week-badge">
         <i class="ti ti-calendar" style="font-size:14px;color:var(--c1d)"></i>
-        <input type="text" id="weekLabel" value="Semana 21 · Mayo 2026">
+        <input type="text" id="weekLabel" value="">
       </div>
     </div>
 
@@ -270,6 +267,21 @@ function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2
 function fmtNum(n){if(!n&&n!==0)return'—';if(n>=1000000)return(n/1000000).toFixed(1)+'M';if(n>=1000)return Math.round(n/1000)+'k';return n.toString()}
 function isFav(id){return favorites.includes(id)}
 
+// ── SEMANA ACTUAL ────────────────────────────────────────────────────
+// Devuelve la etiqueta de la semana ISO actual
+function getCurrentWeekLabel(){
+  return getWeekLabel(new Date().toISOString().slice(0,10));
+}
+
+// Cada lunes a las 00:00, las canciones de la semana anterior
+// ya no tienen ninguna semana con la etiqueta de esta semana,
+// así que simplemente no aparecen en "Semana actual" y sí en Histórico.
+// No hay que mover nada: el filtro de renderWeekly usa la semana ISO actual.
+function checkWeekRollover(){
+  const currentWeek=getCurrentWeekLabel();
+  document.getElementById('weekLabel').value=currentWeek;
+}
+
 function toggleFav(id,el){
   if(isFav(id)){favorites=favorites.filter(f=>f!==id);}else{favorites.push(id);}
   saveFavs();
@@ -287,17 +299,33 @@ function starBtn(songId){
 }
 
 function getWeekLabel(dateStr){
-  const d=new Date(dateStr);
-  const jan1=new Date(d.getFullYear(),0,1);
-  const week=Math.ceil(((d-jan1)/86400000+jan1.getDay()+1)/7);
+  const d=new Date(dateStr+'T12:00:00');
+  // ISO week: lunes = inicio de semana
+  const day=d.getDay()||7; // domingo=7
+  const thursday=new Date(d);
+  thursday.setDate(d.getDate()-(day-4));
+  const jan1=new Date(thursday.getFullYear(),0,1);
+  const week=Math.ceil(((thursday-jan1)/86400000+1)/7);
   const months=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   return`Semana ${week} · ${months[d.getMonth()]} ${d.getFullYear()}`;
 }
+
 function autoWeek(val,hiddenId,labelId){
   if(!val)return;
   const label=getWeekLabel(val);
   document.getElementById(hiddenId).value=label;
   document.getElementById(labelId).textContent=`→ ${label}`;
+}
+
+// Programar revisión cada minuto para detectar cambio de semana
+function scheduleWeekCheck(){
+  setInterval(()=>{
+    const newWeek=getCurrentWeekLabel();
+    if(document.getElementById('weekLabel').value!==newWeek){
+      document.getElementById('weekLabel').value=newWeek;
+      renderAll();
+    }
+  },60000);
 }
 
 function handleSpotifyCSV(input){
@@ -645,8 +673,10 @@ function renderFavorites(){
   }).join('');
 }
 
+// ── VISTAS ───────────────────────────────────────────────────────────
 function renderWeekly(){
   const week=document.getElementById('weekLabel').value.trim();
+  // Muestra todas las canciones que tengan al menos una semana con la etiqueta actual
   const active=db.filter(s=>(s.weeks||[]).some(w=>w.week===week));
   const container=document.getElementById('songCards'),empty=document.getElementById('emptyState');
   if(!active.length){container.innerHTML='';empty.classList.remove('hidden');return;}
@@ -678,37 +708,44 @@ function jumpTo(id){
 function renderHistory(){
   const q=(document.getElementById('histSearch').value||'').toLowerCase();
   const fA=document.getElementById('filterArtist').value,fW=document.getElementById('filterWeek').value;
+  const currentWeek=getCurrentWeekLabel();
   let rows=[];
-  db.forEach(s=>{(s.weeks||[]).forEach(w=>{rows.push({...w,artist:s.artist,song:s.song,songId:s.id});});});
+  // Histórico = todas las semanas que NO sean la semana actual
+  db.forEach(s=>{
+    (s.weeks||[]).forEach(w=>{
+      if(w.week!==currentWeek){
+        rows.push({...w,artist:s.artist,song:s.song,songId:s.id});
+      }
+    });
+  });
   if(q)rows=rows.filter(r=>r.artist.toLowerCase().includes(q)||r.song.toLowerCase().includes(q)||(r.trend||'').toLowerCase().includes(q)||(r.tags||[]).join(' ').toLowerCase().includes(q));
   if(fA)rows=rows.filter(r=>r.artist===fA);
   if(fW)rows=rows.filter(r=>r.week===fW);
-  const grouped={};
-  rows.forEach(r=>{const k=`${r.artist} · ${r.song}`;if(!grouped[k])grouped[k]=[];grouped[k].push(r);});
+  // Ordenar por semana descendente
+  rows.sort((a,b)=>b.week.localeCompare(a.week));
   let html='';
-  if(!rows.length)html='<div class="empty"><i class="ti ti-search-off"></i><p>No hay resultados</p></div>';
-  else Object.entries(grouped).forEach(([key,wrows])=>{
-    html+=`<div class="timeline-group"><div class="timeline-group-title">${key}</div>`;
-    wrows.sort((a,b)=>b.week.localeCompare(a.week)).forEach(r=>{
-      html+=`<div class="history-row">
-        <div class="history-week-dot">${(r.week||'').replace(/[^0-9]/g,'').slice(0,2)||'–'}</div>
-        <div><div style="font-size:13px;font-weight:500">${r.artist} — ${r.song}</div>
+  if(!rows.length)html='<div class="empty"><i class="ti ti-search-off"></i><p>No hay resultados en el histórico</p></div>';
+  else rows.forEach(r=>{
+    html+=`<div class="history-row">
+      <div class="history-week-dot">${(r.week||'').replace(/[^0-9]/g,'').slice(0,2)||'–'}</div>
+      <div>
+        <div style="font-size:13px;font-weight:500">${r.artist} — ${r.song}</div>
         <div class="history-meta">${r.week||'—'}</div>
-        <div class="history-trend">${r.trend||'—'}</div></div>
-        <div style="display:flex;gap:6px">
-          <button class="btn" style="font-size:12px;padding:5px 10px" onclick="showWeekModal('${r.songId}','${r.id}')"><i class="ti ti-edit"></i></button>
-          <button class="btn" style="font-size:12px;padding:5px 10px;color:var(--danger)" onclick="deleteSong('${r.songId}')"><i class="ti ti-trash"></i></button>
-        </div>
-      </div>`;
-    });
-    html+='</div>';
+        <div class="history-trend">${r.trend||'—'}</div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn" style="font-size:12px;padding:5px 10px" onclick="showWeekModal('${r.songId}','${r.id}')"><i class="ti ti-edit"></i></button>
+        <button class="btn" style="font-size:12px;padding:5px 10px;color:var(--danger)" onclick="deleteSong('${r.songId}')"><i class="ti ti-trash"></i></button>
+      </div>
+    </div>`;
   });
   document.getElementById('historyContent').innerHTML=html;
 }
 
 function populateHistoryFilters(){
+  const currentWeek=getCurrentWeekLabel();
   const artists=[...new Set(db.map(s=>s.artist))].sort();
-  const weeks=[...new Set(db.flatMap(s=>s.weeks.map(w=>w.week)))].sort().reverse();
+  const weeks=[...new Set(db.flatMap(s=>s.weeks.filter(w=>w.week!==currentWeek).map(w=>w.week)))].sort().reverse();
   const fa=document.getElementById('filterArtist'),fw=document.getElementById('filterWeek');
   const as=fa.value,ws=fw.value;
   fa.innerHTML='<option value="">Todos los artistas</option>'+artists.map(a=>`<option>${a}</option>`).join('');
@@ -727,6 +764,7 @@ function switchView(view,el){
   if(view==='favorites'){renderFavorites();}
 }
 
+// ── MODALES ──────────────────────────────────────────────────────────
 function showAddModal(){
   document.getElementById('fArtist').value='';
   document.getElementById('fSong').value='';
@@ -753,7 +791,6 @@ function showSongEditModal(songId){
   document.getElementById('eSInsights').value=s.insights||'';
   document.getElementById('editSongModalBg').classList.remove('hidden');
 }
-
 function saveSongEdit(){
   const s=db.find(x=>x.id===pendingSongId);if(!s)return;
   s.artist=document.getElementById('eSArtist').value.trim();
@@ -801,7 +838,7 @@ function saveWeek(){
   };
   if(pendingWeekId)s.weeks=s.weeks.map(w=>w.id===pendingWeekId?entry:w);
   else s.weeks.push(entry);
-  document.getElementById('weekLabel').value=week;
+  document.getElementById('weekLabel').value=entry.week;
   save();closeModal('weekModalBg');renderAll();
 }
 
@@ -823,12 +860,14 @@ function closeModalOutside(e){if(e.target.classList.contains('modal-bg'))e.targe
 function renderAll(){renderWeekly();renderSidebar();if(currentView==='history'){populateHistoryFilters();renderHistory();}if(currentView==='favorites'){renderFavorites();}}
 document.getElementById('weekLabel').addEventListener('change',renderWeekly);
 
+// ── SEED ─────────────────────────────────────────────────────────────
 if(!db.length){
+  const currentWeek=getCurrentWeekLabel();
   db=[{
     id:uid(),artist:'Cano',song:'Así Nací y Así Moriré',
     insights:'https://insights.sonymusic.com/song/ES5022600132/tiktok?country=ES',
     weeks:[{
-      id:uid(),date:'2026-05-21',week:'Semana 21 · Mayo 2026',
+      id:uid(),date:new Date().toISOString().slice(0,10),week:currentWeek,
       trend:'Fotos con tu pareja con la letra "Siendo tú mi lugar favorito, tengo más de lo que necesito" y copys románticos en general, ej "Siempre busqué a alguien como tú". Se usa tanto sonidos UGC como el oficial.',
       tags:['carrusel fotos','ugc','pareja','romántico'],
       spotifyData:null,tiktokData:null,
@@ -837,7 +876,11 @@ if(!db.length){
   }];save();
 }
 
-if(!checkShareMode())renderAll();
+if(!checkShareMode()){
+  checkWeekRollover();
+  scheduleWeekCheck();
+  renderAll();
+}
 </script>
 </body>
 </html>
