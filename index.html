@@ -186,6 +186,17 @@ body{font-family:system-ui,sans-serif;background:#f5f5f0;color:#1a1a18;min-heigh
   </main>
 </div>
 
+<!-- MODAL: Ver semana (histórico) -->
+<div id="viewWeekModalBg" class="modal-bg hidden" onclick="closeModalOutside(event)">
+  <div class="modal" style="max-width:680px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+      <h2 id="viewWeekTitle" style="margin:0"></h2>
+      <button class="btn" onclick="closeModal('viewWeekModalBg')"><i class="ti ti-x"></i></button>
+    </div>
+    <div id="viewWeekBody"></div>
+  </div>
+</div>
+
 <!-- MODAL: Nueva canción -->
 <div id="modalBg" class="modal-bg hidden" onclick="closeModalOutside(event)">
   <div class="modal">
@@ -267,6 +278,11 @@ function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2
 function fmtNum(n){if(!n&&n!==0)return'—';if(n>=1000000)return(n/1000000).toFixed(1)+'M';if(n>=1000)return Math.round(n/1000)+'k';return n.toString()}
 function isFav(id){return favorites.includes(id)}
 
+function getMondayOf(date){
+  const d=new Date(date);d.setHours(0,0,0,0);
+  const day=d.getDay();const diff=day===0?-6:1-day;
+  d.setDate(d.getDate()+diff);return d;
+}
 function getWeekLabel(dateStr){
   const d=new Date(dateStr);
   const jan1=new Date(d.getFullYear(),0,1);
@@ -275,21 +291,23 @@ function getWeekLabel(dateStr){
   return`Semana ${week} · ${months[d.getMonth()]} ${d.getFullYear()}`;
 }
 function getCurrentWeekLabel(){return getWeekLabel(new Date().toISOString().slice(0,10));}
-function getMondayOf(date){
-  const d=new Date(date);const day=d.getDay();const diff=day===0?-6:1-day;
-  d.setDate(d.getDate()+diff);d.setHours(0,0,0,0);return d;
+function isCurrentWeek(w){
+  if(!w.date)return false;
+  const nowMonday=getMondayOf(new Date());
+  const nowSunday=new Date(nowMonday);nowSunday.setDate(nowMonday.getDate()+6);nowSunday.setHours(23,59,59,999);
+  const entryDate=new Date(w.date);entryDate.setHours(12,0,0,0);
+  return entryDate>=nowMonday&&entryDate<=nowSunday;
 }
 function archiveOldWeeks(){
   const nowMonday=getMondayOf(new Date());let changed=false;
   db.forEach(song=>{(song.weeks||[]).forEach(w=>{
-    if(!w.archived&&w.date){const wMonday=getMondayOf(new Date(w.date));if(wMonday<nowMonday){w.archived=true;changed=true;}}
+    if(!w.archived&&w.date){const entryMonday=getMondayOf(new Date(w.date));if(entryMonday<nowMonday){w.archived=true;changed=true;}}
   });});
   if(changed)save();
 }
 function autoWeek(val,hiddenId,labelId){
   if(!val)return;const label=getWeekLabel(val);
-  document.getElementById(hiddenId).value=label;
-  document.getElementById(labelId).textContent=`→ ${label}`;
+  document.getElementById(hiddenId).value=label;document.getElementById(labelId).textContent=`→ ${label}`;
 }
 
 function handleSpotifyCSV(input){
@@ -342,14 +360,64 @@ function toggleFav(id){
   showToast(isFav(id)?'Añadido a Favoritos':'Eliminado de Favoritos');
 }
 
+async function shareWeek(songId,weekId){
+  const song=db.find(s=>s.id===songId);if(!song)return;
+  const week=song.weeks.find(w=>w.id===weekId);if(!week)return;
+  const payload={song:song.song,artist:song.artist,insights:song.insights,...week};
+  const encoded=btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+  const longUrl=`${location.href.split('#')[0]}#share=${encoded}`;
+  showToast('Generando enlace…');
+  try{
+    const r=await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(longUrl)}`);
+    const short=await r.text();
+    navigator.clipboard.writeText(short).then(()=>showToast('Enlace copiado: '+short)).catch(()=>prompt('Copia este enlace:',short));
+  }catch{
+    navigator.clipboard.writeText(longUrl).then(()=>showToast('Enlace copiado al portapapeles')).catch(()=>prompt('Copia este enlace:',longUrl));
+  }
+}
+
+function viewWeek(songId,weekId){
+  const song=db.find(s=>s.id===songId);if(!song)return;
+  const week=song.weeks.find(w=>w.id===weekId);if(!week)return;
+  const tags=(week.tags||[]).filter(Boolean);const videos=(week.videos||[]).filter(Boolean);
+  const hasSpotify=week.spotifyData&&week.spotifyData.length>0;
+  const hasTikTok=week.tiktokData&&(week.tiktokData.creations>0||week.tiktokData.views>0);
+  const hasTikDaily=hasTikTok&&week.tiktokData.daily&&week.tiktokData.daily.length>1;
+  let spotTotal=0,spotAvg=0,spotMax=0;
+  if(hasSpotify){spotTotal=week.spotifyData.reduce((s,d)=>s+d.streams,0);spotAvg=Math.round(spotTotal/week.spotifyData.length);spotMax=Math.max(...week.spotifyData.map(d=>d.streams));}
+  document.getElementById('viewWeekTitle').textContent=`${song.artist} — ${song.song}`;
+  document.getElementById('viewWeekBody').innerHTML=`
+    <div style="margin-bottom:1rem"><span class="tag tag-week"><i class="ti ti-calendar" style="font-size:11px"></i>${week.week}</span></div>
+    <div style="margin-bottom:1.25rem">
+      <div class="section-label"><i class="ti ti-flame" style="font-size:14px;color:#BA7517"></i> Tendencia</div>
+      <div class="trend-box">${week.trend||'—'}${tags.length?`<div class="trend-tags">${tags.map(t=>`<span class="tag tag-trend">${t.trim()}</span>`).join('')}</div>`:''}</div>
+    </div>
+    <div class="data-section" style="margin-bottom:1.25rem">
+      <div>
+        <div class="section-label"><span class="stat-dot spotify-dot"></span> Spotify</div>
+        ${hasSpotify?`<div class="stats-row"><div class="stat-pill"><div class="stat-pill-val" style="color:#1DB954">${fmtNum(spotTotal)}</div><div class="stat-pill-label">Past 28 days</div></div><div class="stat-pill"><div class="stat-pill-val" style="color:#1DB954">${fmtNum(spotAvg)}</div><div class="stat-pill-label">Media/día</div></div><div class="stat-pill"><div class="stat-pill-val" style="color:#1DB954">${fmtNum(spotMax)}</div><div class="stat-pill-label">Pico</div></div></div><div class="chart-wrap"><div style="height:120px"><canvas id="view-schart"></canvas></div></div>`:`<div class="no-data">Sin datos</div>`}
+      </div>
+      <div>
+        <div class="section-label"><span class="stat-dot tiktok-dot"></span> TikTok</div>
+        ${hasTikTok?`<div class="tiktok-grid"><div class="tik-stat tik-stat-main"><i class="ti ti-plus tik-stat-icon"></i><div><div class="tik-stat-val">${fmtNum(week.tiktokData.creations)}</div><div class="tik-stat-label">creaciones</div></div></div><div class="tik-stat"><i class="ti ti-eye tik-stat-icon"></i><div><div class="tik-stat-val">${fmtNum(week.tiktokData.views)}</div><div class="tik-stat-label">views</div></div></div><div class="tik-stat"><i class="ti ti-heart tik-stat-icon"></i><div><div class="tik-stat-val">${fmtNum(week.tiktokData.likes)}</div><div class="tik-stat-label">likes</div></div></div><div class="tik-stat"><i class="ti ti-share tik-stat-icon"></i><div><div class="tik-stat-val">${fmtNum(week.tiktokData.shares)}</div><div class="tik-stat-label">shares</div></div></div><div class="tik-stat"><i class="ti ti-bookmark tik-stat-icon"></i><div><div class="tik-stat-val">${fmtNum(week.tiktokData.favorites)}</div><div class="tik-stat-label">favoritos</div></div></div><div class="tik-stat"><i class="ti ti-message tik-stat-icon"></i><div><div class="tik-stat-val">${fmtNum(week.tiktokData.comments)}</div><div class="tik-stat-label">comentarios</div></div></div></div>${hasTikDaily?`<div class="chart-wrap"><div style="height:120px"><canvas id="view-tchart"></canvas></div></div>`:''}`:`<div class="no-data">Sin datos</div>`}
+      </div>
+    </div>
+    ${videos.length?`<div><div class="section-label"><i class="ti ti-brand-tiktok" style="font-size:14px;color:#ff0050"></i> Ejemplos</div>${videosGrid(videos)}</div>`:''}
+  `;
+  document.getElementById('viewWeekModalBg').classList.remove('hidden');
+  setTimeout(()=>{
+    if(hasSpotify){const labels=week.spotifyData.map(d=>{const dt=new Date(d.date);return`${dt.getDate()}/${dt.getMonth()+1}`;});renderChart('view-schart',labels,week.spotifyData.map(d=>d.streams),'#1DB954');}
+    if(hasTikDaily){const labels=week.tiktokData.daily.map(d=>{const dt=new Date(d.date);return`${dt.getDate()}/${dt.getMonth()+1}`;});renderChart('view-tchart',labels,week.tiktokData.daily.map(d=>d.creations),'#ff0050');}
+  },50);
+}
+
 function renderSongCard(song){
   const weeks=song.weeks||[];
   const sorted=[...weeks].sort((a,b)=>b.week.localeCompare(a.week));
   const latest=sorted[0];const older=sorted.slice(1);
   if(!latest)return'';
   const covId=`cover-${song.id}`;
-  const tags=(latest.tags||[]).filter(Boolean);
-  const videos=(latest.videos||[]).filter(Boolean);
+  const tags=(latest.tags||[]).filter(Boolean);const videos=(latest.videos||[]).filter(Boolean);
   const hasSpotify=latest.spotifyData&&latest.spotifyData.length>0;
   const hasTikTok=latest.tiktokData&&(latest.tiktokData.creations>0||latest.tiktokData.views>0);
   const hasTikDaily=hasTikTok&&latest.tiktokData.daily&&latest.tiktokData.daily.length>1;
@@ -413,13 +481,6 @@ function toggleCard(bodyId){
 }
 function toggleAccordion(header){header.classList.toggle('open');header.nextElementSibling.classList.toggle('open');}
 
-function shareWeek(songId,weekId){
-  const song=db.find(s=>s.id===songId);if(!song)return;const week=song.weeks.find(w=>w.id===weekId);if(!week)return;
-  const payload={song:song.song,artist:song.artist,insights:song.insights,...week};
-  const encoded=btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
-  const shareUrl=`${location.href.split('#')[0]}#share=${encoded}`;
-  navigator.clipboard.writeText(shareUrl).then(()=>showToast('Enlace copiado al portapapeles')).catch(()=>prompt('Copia este enlace:',shareUrl));
-}
 function showToast(msg){
   let t=document.getElementById('toast');
   if(!t){t=document.createElement('div');t.id='toast';t.style.cssText='position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);background:#1a1a18;color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;z-index:999;transition:opacity .3s';document.body.appendChild(t);}
@@ -427,14 +488,13 @@ function showToast(msg){
 }
 
 function renderWeekly(){
-  const currentWeek=getCurrentWeekLabel();
-  document.getElementById('weekLabel').textContent=currentWeek;
-  const active=db.filter(s=>(s.weeks||[]).some(w=>!w.archived&&w.week===currentWeek));
+  document.getElementById('weekLabel').textContent=getCurrentWeekLabel();
+  const active=db.filter(s=>(s.weeks||[]).some(w=>isCurrentWeek(w)));
   const container=document.getElementById('songCards'),empty=document.getElementById('emptyState');
   if(!active.length){container.innerHTML='';empty.classList.remove('hidden');return;}
   empty.classList.add('hidden');
   container.innerHTML=active.map(s=>{
-    const weekSong={...s,weeks:s.weeks.filter(w=>!w.archived&&w.week===currentWeek)};
+    const weekSong={...s,weeks:s.weeks.filter(w=>isCurrentWeek(w))};
     return renderSongCard(weekSong);
   }).join('');
 }
@@ -443,9 +503,7 @@ function renderSidebar(){
   const q=(document.getElementById('sidebarSearch').value||'').toLowerCase();
   let html='';
   db.filter(s=>!q||s.artist.toLowerCase().includes(q)||s.song.toLowerCase().includes(q))
-    .forEach(s=>{
-      html+=`<span class="song-link" onclick="jumpTo('${s.id}')"><span class="song-link-artist">${s.artist}</span><span class="song-link-sep">·</span>${s.song}</span>`;
-    });
+    .forEach(s=>{html+=`<span class="song-link" onclick="jumpTo('${s.id}')"><span class="song-link-artist">${s.artist}</span><span class="song-link-sep">·</span>${s.song}</span>`;});
   document.getElementById('artistTree').innerHTML=html||`<p style="font-size:12px;color:var(--muted);padding:.5rem 8px">Sin resultados</p>`;
 }
 
@@ -474,6 +532,7 @@ function renderHistory(){
         <div class="history-trend">${r.trend||'—'}</div>
       </div>
       <div style="display:flex;gap:6px">
+        <button class="btn" style="font-size:12px;padding:5px 10px" onclick="viewWeek('${r.songId}','${r.id}')"><i class="ti ti-eye"></i> Ver</button>
         <button class="btn" style="font-size:12px;padding:5px 10px" onclick="showWeekModal('${r.songId}','${r.id}')"><i class="ti ti-edit"></i></button>
         <button class="btn" style="font-size:12px;padding:5px 10px;color:var(--danger)" onclick="deleteWeek('${r.songId}','${r.id}')"><i class="ti ti-trash"></i></button>
       </div>
@@ -559,11 +618,12 @@ function showWeekModal(songId,weekId){
 
 function saveWeek(){
   const week=document.getElementById('wWeek').value.trim();if(!week){alert('Selecciona una fecha para calcular la semana');return;}
+  const dateVal=document.getElementById('wDate').value;
   const s=db.find(x=>x.id===pendingSongId);if(!s)return;
   const existing=pendingWeekId?s.weeks.find(w=>w.id===pendingWeekId):null;
-  const currentWeek=getCurrentWeekLabel();
-  const isArchived=existing?existing.archived:(week!==currentWeek);
-  const entry={id:pendingWeekId||uid(),date:document.getElementById('wDate').value,week,archived:isArchived,trend:document.getElementById('wTrend').value.trim(),tags:document.getElementById('wTags').value.split(',').map(t=>t.trim()).filter(Boolean),spotifyData:pendingSpotify!==null?pendingSpotify:(existing?.spotifyData||null),tiktokData:pendingTikTok!==null?pendingTikTok:(existing?.tiktokData||null),videos:[...document.querySelectorAll('#wUrlList input')].map(i=>i.value.trim()).filter(Boolean)};
+  const entryMonday=getMondayOf(new Date(dateVal));const nowMonday=getMondayOf(new Date());
+  const isArchived=existing?existing.archived:(entryMonday<nowMonday);
+  const entry={id:pendingWeekId||uid(),date:dateVal,week,archived:isArchived,trend:document.getElementById('wTrend').value.trim(),tags:document.getElementById('wTags').value.split(',').map(t=>t.trim()).filter(Boolean),spotifyData:pendingSpotify!==null?pendingSpotify:(existing?.spotifyData||null),tiktokData:pendingTikTok!==null?pendingTikTok:(existing?.tiktokData||null),videos:[...document.querySelectorAll('#wUrlList input')].map(i=>i.value.trim()).filter(Boolean)};
   if(pendingWeekId)s.weeks=s.weeks.map(w=>w.id===pendingWeekId?entry:w);else s.weeks.push(entry);
   save();closeModal('weekModalBg');renderAll();
 }
@@ -584,8 +644,8 @@ function closeModalOutside(e){if(e.target.classList.contains('modal-bg'))e.targe
 function renderAll(){renderWeekly();renderSidebar();if(currentView==='history'){populateHistoryFilters();renderHistory();}if(currentView==='favorites'){renderFavorites();}}
 
 if(!db.length){
-  const today=new Date().toISOString().slice(0,10);const currentWeek=getCurrentWeekLabel();
-  db=[{id:uid(),artist:'Cano',song:'Así Nací y Así Moriré',insights:'https://insights.sonymusic.com/song/ES5022600132/tiktok?country=ES',weeks:[{id:uid(),date:today,week:currentWeek,archived:false,trend:'Fotos con tu pareja con la letra "Siendo tú mi lugar favorito, tengo más de lo que necesito" y copys románticos en general.',tags:['carrusel fotos','ugc','pareja','romántico'],spotifyData:null,tiktokData:null,videos:['https://www.tiktok.com/@brunoflorenciano/photo/7636402153451506947','https://www.tiktok.com/@087008i/photo/7638408042626764054','https://www.tiktok.com/@55grccc/photo/7636706227657116930','https://www.tiktok.com/@marinaglvz02/photo/7637650040839818518']}]}];
+  const today=new Date().toISOString().slice(0,10);
+  db=[{id:uid(),artist:'Cano',song:'Así Nací y Así Moriré',insights:'https://insights.sonymusic.com/song/ES5022600132/tiktok?country=ES',weeks:[{id:uid(),date:today,week:getCurrentWeekLabel(),archived:false,trend:'Fotos con tu pareja con la letra "Siendo tú mi lugar favorito, tengo más de lo que necesito" y copys románticos en general.',tags:['carrusel fotos','ugc','pareja','romántico'],spotifyData:null,tiktokData:null,videos:['https://www.tiktok.com/@brunoflorenciano/photo/7636402153451506947','https://www.tiktok.com/@087008i/photo/7638408042626764054','https://www.tiktok.com/@55grccc/photo/7636706227657116930','https://www.tiktok.com/@marinaglvz02/photo/7637650040839818518']}]}];
   save();
 }
 
