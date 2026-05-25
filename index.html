@@ -119,14 +119,16 @@ body{font-family:system-ui,sans-serif;background:#f5f5f0;color:#1a1a18;min-heigh
 .fav-avatar{width:36px;height:36px;border-radius:8px;background:var(--c1l);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;overflow:hidden}
 .fav-remove{background:none;border:none;cursor:pointer;color:var(--star);font-size:18px;padding:4px;border-radius:6px;display:flex;align-items:center}
 .fav-remove:hover{background:var(--starl)}
+.modal-divider{border:none;border-top:0.5px solid var(--border);margin:1.25rem 0}
 </style>
 </head>
 <body>
 <div class="app">
   <aside class="sidebar">
     <div>
+      <!-- (3) Título cambiado a Track Reaction -->
       <div style="font-size:15px;font-weight:500;margin-bottom:1rem;display:flex;align-items:center;gap:8px">
-        <i class="ti ti-music" style="color:var(--c1)"></i> Music Trends
+        <i class="ti ti-music" style="color:var(--c1)"></i> Track Reaction
       </div>
       <div class="search-box">
         <i class="ti ti-search"></i>
@@ -205,7 +207,8 @@ body{font-family:system-ui,sans-serif;background:#f5f5f0;color:#1a1a18;min-heigh
       <div class="field"><label>Artista</label><input type="text" id="fArtist" placeholder="Cano"></div>
       <div class="field"><label>Canción</label><input type="text" id="fSong" placeholder="Así Nací y Así Moriré"></div>
     </div>
-    <div class="field"><label>Link de insights (opcional)</label><input type="text" id="fInsights" placeholder="https://insights.sonymusic.com/..."></div>
+    <div class="field"><label>Link de Insights (opcional)</label><input type="text" id="fInsights" placeholder="https://insights.sonymusic.com/..."></div>
+    <div class="field"><label>Link de Melody IQ (opcional)</label><input type="text" id="fMelodyIQ" placeholder="https://melodyiq.com/..."></div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('modalBg')">Cancelar</button>
       <button class="btn btn-primary" onclick="saveSong()"><i class="ti ti-check"></i> Crear canción</button>
@@ -248,15 +251,46 @@ body{font-family:system-ui,sans-serif;background:#f5f5f0;color:#1a1a18;min-heigh
   </div>
 </div>
 
-<!-- MODAL: Editar canción base -->
+<!-- (2) MODAL: Editar canción — ahora con todos los campos -->
 <div id="editSongModalBg" class="modal-bg hidden" onclick="closeModalOutside(event)">
-  <div class="modal">
+  <div class="modal" style="max-width:600px">
     <h2>Editar canción</h2>
+
+    <!-- Datos básicos -->
     <div class="field-row">
       <div class="field"><label>Artista</label><input type="text" id="eSArtist"></div>
       <div class="field"><label>Canción</label><input type="text" id="eSong"></div>
     </div>
-    <div class="field"><label>Link de insights (opcional)</label><input type="text" id="eSInsights"></div>
+    <div class="field"><label>Link de Insights (opcional)</label><input type="text" id="eSInsights" placeholder="https://insights.sonymusic.com/..."></div>
+    <div class="field"><label>Link de Melody IQ (opcional)</label><input type="text" id="eSMelodyIQ" placeholder="https://melodyiq.com/..."></div>
+
+    <hr class="modal-divider">
+    <p style="font-size:12px;color:var(--muted);margin-bottom:1rem">Editar semana actual (opcional)</p>
+
+    <div class="field">
+      <label>Fecha del informe</label>
+      <input type="date" id="eSDate" onchange="autoWeek(this.value,'eSWeek','eSWeekLabel')">
+      <div class="week-auto" id="eSWeekLabel">Selecciona una fecha para calcular la semana</div>
+      <input type="hidden" id="eSWeek">
+    </div>
+    <div class="field"><label>Tendencia (descripción)</label><textarea id="eSTrend" rows="3" placeholder="Fotos con tu pareja con la letra..."></textarea></div>
+    <div class="field"><label>Etiquetas de tendencia (separadas por comas)</label><input type="text" id="eSTags" placeholder="carrusel fotos, ugc, pareja, romántico"></div>
+    <div class="field">
+      <label>CSV Spotify</label>
+      <input type="file" id="eSSpotifyCSV" accept=".csv" onchange="handleSpotifyCSVEdit(this)">
+      <div class="csv-status" id="eSSpotifyCSVStatus"></div>
+    </div>
+    <div class="field">
+      <label>CSV TikTok</label>
+      <input type="file" id="eSTikTokCSV" accept=".csv" onchange="handleTikTokCSVEdit(this)">
+      <div class="csv-status" id="eSTikTokCSVStatus"></div>
+    </div>
+    <div class="field">
+      <label>Vídeos de TikTok (URLs)</label>
+      <div class="url-list" id="eSUrlList"></div>
+      <div class="add-url" onclick="addUrlField('eSUrlList')"><i class="ti ti-plus" style="font-size:13px"></i> Añadir vídeo</div>
+    </div>
+
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('editSongModalBg')">Cancelar</button>
       <button class="btn btn-primary" onclick="saveSongEdit()"><i class="ti ti-check"></i> Guardar</button>
@@ -270,6 +304,7 @@ let favorites=JSON.parse(localStorage.getItem('musicFavorites')||'[]');
 let currentView='weekly';
 let pendingSongId=null,pendingWeekId=null;
 let pendingSpotify=null,pendingTikTok=null;
+let pendingSpotifyEdit=null,pendingTikTokEdit=null;
 const charts={};
 
 function save(){localStorage.setItem('musicDB2',JSON.stringify(db))}
@@ -319,16 +354,34 @@ function handleSpotifyCSV(input){
     const st=document.getElementById('wSpotifyCSVStatus');st.style.display='block';st.textContent=`✓ ${data.length} días · ${fmtNum(total)} streams · Media: ${fmtNum(avg)}/día`;
   }});
 }
+function handleSpotifyCSVEdit(input){
+  const file=input.files[0];if(!file)return;
+  Papa.parse(file,{header:true,skipEmptyLines:true,complete:r=>{
+    const data=r.data.map(row=>({date:row['Date']||row['date']||'',streams:parseInt(row['Spotify']||row['spotify']||0)||0})).filter(d=>d.date&&d.streams>0);
+    data.sort((a,b)=>new Date(a.date)-new Date(b.date));pendingSpotifyEdit=data;
+    const total=data.reduce((s,d)=>s+d.streams,0),avg=Math.round(total/data.length);
+    const st=document.getElementById('eSSpotifyCSVStatus');st.style.display='block';st.textContent=`✓ ${data.length} días · ${fmtNum(total)} streams · Media: ${fmtNum(avg)}/día`;
+  }});
+}
+function parseTikTokRows(rows){
+  if(rows.length>1&&(rows[0]['Date']||rows[0]['date'])){
+    return{daily:rows.map(row=>({date:row['Date']||row['date']||'',creations:parseInt(row['Creations']||row['creations']||0)||0,views:parseInt(row['Views']||row['views']||0)||0})).filter(d=>d.date).sort((a,b)=>new Date(a.date)-new Date(b.date)),creations:rows.reduce((s,r)=>s+(parseInt(r['Creations']||r['creations']||0)||0),0),views:rows.reduce((s,r)=>s+(parseInt(r['Views']||r['views']||0)||0),0),favorites:rows.reduce((s,r)=>s+(parseInt(r['Favorites']||r['favorites']||0)||0),0),shares:rows.reduce((s,r)=>s+(parseInt(r['Shares']||r['shares']||0)||0),0),likes:rows.reduce((s,r)=>s+(parseInt(r['Likes']||r['likes']||0)||0),0),comments:rows.reduce((s,r)=>s+(parseInt(r['Comments']||r['comments']||0)||0),0),period:''};
+  } else {
+    const row=rows[0]||{};return{daily:null,views:parseInt(row['Views']||row['views']||0)||0,creations:parseInt(row['Creations']||row['creations']||0)||0,favorites:parseInt(row['Favorites']||row['favorites']||0)||0,shares:parseInt(row['Shares']||row['shares']||0)||0,likes:parseInt(row['Likes']||row['likes']||0)||0,comments:parseInt(row['Comments']||row['comments']||0)||0,period:row['Time Period']||row['time period']||''};
+  }
+}
 function handleTikTokCSV(input){
   const file=input.files[0];if(!file)return;
   Papa.parse(file,{header:true,skipEmptyLines:true,complete:r=>{
-    const rows=r.data;let result;
-    if(rows.length>1&&(rows[0]['Date']||rows[0]['date'])){
-      result={daily:rows.map(row=>({date:row['Date']||row['date']||'',creations:parseInt(row['Creations']||row['creations']||0)||0,views:parseInt(row['Views']||row['views']||0)||0})).filter(d=>d.date).sort((a,b)=>new Date(a.date)-new Date(b.date)),creations:rows.reduce((s,r)=>s+(parseInt(r['Creations']||r['creations']||0)||0),0),views:rows.reduce((s,r)=>s+(parseInt(r['Views']||r['views']||0)||0),0),favorites:rows.reduce((s,r)=>s+(parseInt(r['Favorites']||r['favorites']||0)||0),0),shares:rows.reduce((s,r)=>s+(parseInt(r['Shares']||r['shares']||0)||0),0),likes:rows.reduce((s,r)=>s+(parseInt(r['Likes']||r['likes']||0)||0),0),comments:rows.reduce((s,r)=>s+(parseInt(r['Comments']||r['comments']||0)||0),0),period:''};
-    } else {
-      const row=rows[0]||{};result={daily:null,views:parseInt(row['Views']||row['views']||0)||0,creations:parseInt(row['Creations']||row['creations']||0)||0,favorites:parseInt(row['Favorites']||row['favorites']||0)||0,shares:parseInt(row['Shares']||row['shares']||0)||0,likes:parseInt(row['Likes']||row['likes']||0)||0,comments:parseInt(row['Comments']||row['comments']||0)||0,period:row['Time Period']||row['time period']||''};
-    }
-    pendingTikTok=result;const st=document.getElementById('wTikTokCSVStatus');st.style.display='block';st.textContent=`✓ ${fmtNum(result.creations)} creaciones · ${fmtNum(result.views)} views`;
+    pendingTikTok=parseTikTokRows(r.data);
+    const st=document.getElementById('wTikTokCSVStatus');st.style.display='block';st.textContent=`✓ ${fmtNum(pendingTikTok.creations)} creaciones · ${fmtNum(pendingTikTok.views)} views`;
+  }});
+}
+function handleTikTokCSVEdit(input){
+  const file=input.files[0];if(!file)return;
+  Papa.parse(file,{header:true,skipEmptyLines:true,complete:r=>{
+    pendingTikTokEdit=parseTikTokRows(r.data);
+    const st=document.getElementById('eSTikTokCSVStatus');st.style.display='block';st.textContent=`✓ ${fmtNum(pendingTikTokEdit.creations)} creaciones · ${fmtNum(pendingTikTokEdit.views)} views`;
   }});
 }
 
@@ -363,7 +416,7 @@ function toggleFav(id){
 async function shareWeek(songId,weekId){
   const song=db.find(s=>s.id===songId);if(!song)return;
   const week=song.weeks.find(w=>w.id===weekId);if(!week)return;
-  const payload={song:song.song,artist:song.artist,insights:song.insights,...week};
+  const payload={song:song.song,artist:song.artist,insights:song.insights,melodyIQ:song.melodyIQ,...week};
   const encoded=btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
   const longUrl=`${location.href.split('#')[0]}#share=${encoded}`;
   showToast('Generando enlace…');
@@ -411,6 +464,14 @@ function viewWeek(songId,weekId){
   },50);
 }
 
+// (1) Links de Insights y Melody IQ en la card
+function songLinks(song){
+  let html='';
+  if(song.insights)html+=`<a href="${song.insights}" target="_blank" style="font-size:11px;color:var(--c1);display:inline-flex;align-items:center;gap:3px;text-decoration:none" onclick="event.stopPropagation()"><i class="ti ti-external-link" style="font-size:11px"></i>Insights</a>`;
+  if(song.melodyIQ)html+=`<a href="${song.melodyIQ}" target="_blank" style="font-size:11px;color:var(--c1);display:inline-flex;align-items:center;gap:3px;text-decoration:none" onclick="event.stopPropagation()"><i class="ti ti-external-link" style="font-size:11px"></i>Melody IQ</a>`;
+  return html;
+}
+
 function renderSongCard(song){
   const weeks=song.weeks||[];
   const sorted=[...weeks].sort((a,b)=>b.week.localeCompare(a.week));
@@ -437,7 +498,7 @@ function renderSongCard(song){
         <div class="song-avatar" id="${covId}">🎵</div>
         <div class="song-meta">
           <div class="song-name">${song.song}</div>
-          <div class="song-artist"><span>${song.artist}</span>${song.insights?`<a href="${song.insights}" target="_blank" style="font-size:11px;color:var(--c1);display:inline-flex;align-items:center;gap:3px;text-decoration:none" onclick="event.stopPropagation()"><i class="ti ti-external-link" style="font-size:11px"></i>Insights</a>`:''}</div>
+          <div class="song-artist"><span>${song.artist}</span>${songLinks(song)}</div>
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -565,7 +626,7 @@ function renderFavorites(){
     const latest=[...song.weeks].sort((a,b)=>b.week.localeCompare(a.week))[0];
     const covId=`fav-cover-${song.id}`;
     setTimeout(async()=>{const url=await fetchCover(song.artist,song.song);const el=document.getElementById(covId);if(el&&url)el.innerHTML=`<img src="${url}" style="width:100%;height:100%;object-fit:cover;border-radius:8px" alt="">`;},0);
-    return`<div class="fav-card"><div class="fav-avatar" id="${covId}">🎵</div><div><div style="font-size:14px;font-weight:500">${song.song}</div><div style="font-size:12px;color:var(--muted);margin-top:2px;display:flex;align-items:center;gap:8px"><span>${song.artist}</span>${latest?`<span class="tag tag-week" style="font-size:10px;padding:2px 6px"><i class="ti ti-calendar" style="font-size:10px"></i>${latest.week}</span>`:''} ${song.insights?`<a href="${song.insights}" target="_blank" style="font-size:11px;color:var(--c1);display:inline-flex;align-items:center;gap:3px;text-decoration:none"><i class="ti ti-external-link" style="font-size:11px"></i>Insights</a>`:''}</div>${latest&&latest.trend?`<div style="font-size:12px;color:var(--muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:360px">${latest.trend}</div>`:''}</div><div style="display:flex;align-items:center;gap:6px"><button class="btn" style="font-size:12px;padding:5px 10px" onclick="jumpTo('${song.id}')"><i class="ti ti-arrow-right"></i> Ver</button><button class="fav-remove" title="Quitar de favoritos" onclick="toggleFav('${song.id}')"><i class="ti ti-star"></i></button></div></div>`;
+    return`<div class="fav-card"><div class="fav-avatar" id="${covId}">🎵</div><div><div style="font-size:14px;font-weight:500">${song.song}</div><div style="font-size:12px;color:var(--muted);margin-top:2px;display:flex;align-items:center;gap:8px"><span>${song.artist}</span>${latest?`<span class="tag tag-week" style="font-size:10px;padding:2px 6px"><i class="ti ti-calendar" style="font-size:10px"></i>${latest.week}</span>`:''} ${song.insights?`<a href="${song.insights}" target="_blank" style="font-size:11px;color:var(--c1);display:inline-flex;align-items:center;gap:3px;text-decoration:none"><i class="ti ti-external-link" style="font-size:11px"></i>Insights</a>`:''} ${song.melodyIQ?`<a href="${song.melodyIQ}" target="_blank" style="font-size:11px;color:var(--c1);display:inline-flex;align-items:center;gap:3px;text-decoration:none"><i class="ti ti-external-link" style="font-size:11px"></i>Melody IQ</a>`:''}</div>${latest&&latest.trend?`<div style="font-size:12px;color:var(--muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:360px">${latest.trend}</div>`:''}</div><div style="display:flex;align-items:center;gap:6px"><button class="btn" style="font-size:12px;padding:5px 10px" onclick="jumpTo('${song.id}')"><i class="ti ti-arrow-right"></i> Ver</button><button class="fav-remove" title="Quitar de favoritos" onclick="toggleFav('${song.id}')"><i class="ti ti-star"></i></button></div></div>`;
   }).join('');
 }
 
@@ -579,23 +640,74 @@ function switchView(view,el){
   if(view==='favorites'){renderFavorites();}
 }
 
-function showAddModal(){document.getElementById('fArtist').value='';document.getElementById('fSong').value='';document.getElementById('fInsights').value='';document.getElementById('modalBg').classList.remove('hidden');}
+function showAddModal(){
+  document.getElementById('fArtist').value='';document.getElementById('fSong').value='';
+  document.getElementById('fInsights').value='';document.getElementById('fMelodyIQ').value='';
+  document.getElementById('modalBg').classList.remove('hidden');
+}
 
 function saveSong(){
   const artist=document.getElementById('fArtist').value.trim();const song=document.getElementById('fSong').value.trim();
   if(!artist||!song){alert('Artista y canción son obligatorios');return;}
-  const s={id:uid(),artist,song,insights:document.getElementById('fInsights').value.trim(),weeks:[]};
+  const s={id:uid(),artist,song,insights:document.getElementById('fInsights').value.trim(),melodyIQ:document.getElementById('fMelodyIQ').value.trim(),weeks:[]};
   db.push(s);save();closeModal('modalBg');renderAll();showWeekModal(s.id,null);
 }
 
+// (2) Editar canción con todos los campos
 function showSongEditModal(songId){
-  const s=db.find(x=>x.id===songId);if(!s)return;pendingSongId=songId;
-  document.getElementById('eSArtist').value=s.artist||'';document.getElementById('eSong').value=s.song||'';document.getElementById('eSInsights').value=s.insights||'';
+  const s=db.find(x=>x.id===songId);if(!s)return;
+  pendingSongId=songId;pendingSpotifyEdit=null;pendingTikTokEdit=null;
+
+  // Datos básicos
+  document.getElementById('eSArtist').value=s.artist||'';
+  document.getElementById('eSong').value=s.song||'';
+  document.getElementById('eSInsights').value=s.insights||'';
+  document.getElementById('eSMelodyIQ').value=s.melodyIQ||'';
+
+  // Semana actual (si existe)
+  const currentWeek=s.weeks.find(w=>isCurrentWeek(w))||null;
+  document.getElementById('eSDate').value=currentWeek?.date||'';
+  document.getElementById('eSWeek').value=currentWeek?.week||'';
+  document.getElementById('eSWeekLabel').textContent=currentWeek?.week?`→ ${currentWeek.week}`:'Selecciona una fecha para calcular la semana';
+  document.getElementById('eSTrend').value=currentWeek?.trend||'';
+  document.getElementById('eSTags').value=(currentWeek?.tags||[]).join(', ');
+  document.getElementById('eSSpotifyCSV').value='';
+  document.getElementById('eSTikTokCSV').value='';
+  const ss=document.getElementById('eSSpotifyCSVStatus'),ts=document.getElementById('eSTikTokCSVStatus');
+  if(currentWeek?.spotifyData?.length){ss.style.display='block';ss.textContent=`✓ ${currentWeek.spotifyData.length} días cargados`;}else ss.style.display='none';
+  if(currentWeek?.tiktokData?.creations){ts.style.display='block';ts.textContent=`✓ ${fmtNum(currentWeek.tiktokData.creations)} creaciones cargadas`;}else ts.style.display='none';
+  document.getElementById('eSUrlList').innerHTML='';
+  (currentWeek?.videos||['']).forEach(v=>addUrlField('eSUrlList',v));
+
   document.getElementById('editSongModalBg').classList.remove('hidden');
 }
+
 function saveSongEdit(){
   const s=db.find(x=>x.id===pendingSongId);if(!s)return;
-  s.artist=document.getElementById('eSArtist').value.trim();s.song=document.getElementById('eSong').value.trim();s.insights=document.getElementById('eSInsights').value.trim();
+  s.artist=document.getElementById('eSArtist').value.trim();
+  s.song=document.getElementById('eSong').value.trim();
+  s.insights=document.getElementById('eSInsights').value.trim();
+  s.melodyIQ=document.getElementById('eSMelodyIQ').value.trim();
+
+  // Guardar semana si se rellenó fecha
+  const dateVal=document.getElementById('eSDate').value;
+  const weekVal=document.getElementById('eSWeek').value.trim();
+  if(dateVal && weekVal){
+    const existing=s.weeks.find(w=>isCurrentWeek(w));
+    const entryMonday=getMondayOf(new Date(dateVal));const nowMonday=getMondayOf(new Date());
+    const isArchived=entryMonday<nowMonday;
+    const entry={
+      id:existing?.id||uid(),date:dateVal,week:weekVal,archived:isArchived,
+      trend:document.getElementById('eSTrend').value.trim(),
+      tags:document.getElementById('eSTags').value.split(',').map(t=>t.trim()).filter(Boolean),
+      spotifyData:pendingSpotifyEdit!==null?pendingSpotifyEdit:(existing?.spotifyData||null),
+      tiktokData:pendingTikTokEdit!==null?pendingTikTokEdit:(existing?.tiktokData||null),
+      videos:[...document.querySelectorAll('#eSUrlList input')].map(i=>i.value.trim()).filter(Boolean)
+    };
+    if(existing)s.weeks=s.weeks.map(w=>w.id===existing.id?entry:w);
+    else s.weeks.push(entry);
+  }
+
   save();closeModal('editSongModalBg');renderAll();
 }
 
@@ -645,7 +757,7 @@ function renderAll(){renderWeekly();renderSidebar();if(currentView==='history'){
 
 if(!db.length){
   const today=new Date().toISOString().slice(0,10);
-  db=[{id:uid(),artist:'Cano',song:'Así Nací y Así Moriré',insights:'https://insights.sonymusic.com/song/ES5022600132/tiktok?country=ES',weeks:[{id:uid(),date:today,week:getCurrentWeekLabel(),archived:false,trend:'Fotos con tu pareja con la letra "Siendo tú mi lugar favorito, tengo más de lo que necesito" y copys románticos en general.',tags:['carrusel fotos','ugc','pareja','romántico'],spotifyData:null,tiktokData:null,videos:['https://www.tiktok.com/@brunoflorenciano/photo/7636402153451506947','https://www.tiktok.com/@087008i/photo/7638408042626764054','https://www.tiktok.com/@55grccc/photo/7636706227657116930','https://www.tiktok.com/@marinaglvz02/photo/7637650040839818518']}]}];
+  db=[{id:uid(),artist:'Cano',song:'Así Nací y Así Moriré',insights:'https://insights.sonymusic.com/song/ES5022600132/tiktok?country=ES',melodyIQ:'',weeks:[{id:uid(),date:today,week:getCurrentWeekLabel(),archived:false,trend:'Fotos con tu pareja con la letra "Siendo tú mi lugar favorito, tengo más de lo que necesito" y copys románticos en general.',tags:['carrusel fotos','ugc','pareja','romántico'],spotifyData:null,tiktokData:null,videos:['https://www.tiktok.com/@brunoflorenciano/photo/7636402153451506947','https://www.tiktok.com/@087008i/photo/7638408042626764054','https://www.tiktok.com/@55grccc/photo/7636706227657116930','https://www.tiktok.com/@marinaglvz02/photo/7637650040839818518']}]}];
   save();
 }
 
