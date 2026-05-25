@@ -29,8 +29,9 @@ body{font-family:system-ui,sans-serif;background:#f5f5f0;color:#1a1a18;min-heigh
 .search-box input{width:100%;padding:8px 10px 8px 34px;border:0.5px solid var(--border);border-radius:8px;background:var(--surface);font-size:13px;color:#1a1a18;outline:none}
 .search-box input:focus{border-color:var(--c1)}
 .sidebar-section{font-size:11px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:.5rem}
-.song-link{font-size:12px;padding:3px 8px;color:var(--muted);cursor:pointer;border-radius:6px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.song-link{font-size:12px;padding:4px 8px;color:var(--muted);cursor:pointer;border-radius:6px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;transition:background .1s,color .1s}
 .song-link:hover{background:var(--surface);color:#1a1a18}
+.song-link.active{background:var(--c1l);color:var(--c1d);font-weight:500}
 .song-link-artist{font-weight:500;color:#1a1a18}
 .song-link-sep{color:var(--border);margin:0 4px}
 .song-card{background:var(--card);border:0.5px solid var(--border);border-radius:12px;margin-bottom:1rem;overflow:hidden}
@@ -131,11 +132,11 @@ body{font-family:system-ui,sans-serif;background:#f5f5f0;color:#1a1a18;min-heigh
       </div>
       <div class="search-box">
         <i class="ti ti-search"></i>
-        <input type="text" id="sidebarSearch" placeholder="Buscar artista o canción..." oninput="renderSidebar()">
+        <input type="text" id="sidebarSearch" placeholder="Buscar canción..." oninput="renderSidebar()">
       </div>
     </div>
     <div>
-      <div class="sidebar-section">Artistas & canciones</div>
+      <div class="sidebar-section">Esta semana</div>
       <div id="artistTree"></div>
     </div>
     <div style="margin-top:auto;padding-top:1rem;border-top:0.5px solid var(--border)">
@@ -339,14 +340,13 @@ function autoWeek(val,hiddenId,labelId){
   document.getElementById(hiddenId).value=label;document.getElementById(labelId).textContent=`→ ${label}`;
 }
 
-// ── CSV Spotify (lee Total, Spotify o spotify) ────────────────────────
 function parseSpotifyRows(rows){
+  const hasSpotifyCol=rows.some(r=>parseInt(r['Spotify']||r['spotify']||0)>0);
   return rows.map(row=>({
     date:row['Date']||row['date']||'',
-    streams:parseInt(row['Spotify']||row['spotify']||row['Total']||row['total']||0)||0
+    streams:hasSpotifyCol?parseInt(row['Spotify']||row['spotify']||0)||0:parseInt(row['Total']||row['total']||0)||0
   })).filter(d=>d.date&&d.streams>0);
 }
-
 function handleSpotifyCSV(input){
   const file=input.files[0];if(!file)return;
   Papa.parse(file,{header:true,skipEmptyLines:true,complete:r=>{
@@ -357,7 +357,6 @@ function handleSpotifyCSV(input){
     st.textContent=`✓ ${data.length} días · ${fmtNum(total)} streams · Media: ${fmtNum(avg)}/día`;
   }});
 }
-
 function handleSpotifyCSVEdit(input){
   const file=input.files[0];if(!file)return;
   Papa.parse(file,{header:true,skipEmptyLines:true,complete:r=>{
@@ -368,7 +367,6 @@ function handleSpotifyCSVEdit(input){
     st.textContent=`✓ ${data.length} días · ${fmtNum(total)} streams · Media: ${fmtNum(avg)}/día`;
   }});
 }
-
 function parseTikTokRows(rows){
   if(rows.length>1&&(rows[0]['Date']||rows[0]['date'])){
     return{daily:rows.map(row=>({date:row['Date']||row['date']||'',creations:parseInt(row['Creations']||row['creations']||0)||0,views:parseInt(row['Views']||row['views']||0)||0})).filter(d=>d.date).sort((a,b)=>new Date(a.date)-new Date(b.date)),creations:rows.reduce((s,r)=>s+(parseInt(r['Creations']||r['creations']||0)||0),0),views:rows.reduce((s,r)=>s+(parseInt(r['Views']||r['views']||0)||0),0),favorites:rows.reduce((s,r)=>s+(parseInt(r['Favorites']||r['favorites']||0)||0),0),shares:rows.reduce((s,r)=>s+(parseInt(r['Shares']||r['shares']||0)||0),0),likes:rows.reduce((s,r)=>s+(parseInt(r['Likes']||r['likes']||0)||0),0),comments:rows.reduce((s,r)=>s+(parseInt(r['Comments']||r['comments']||0)||0),0),period:''};
@@ -498,7 +496,7 @@ function renderSongCard(song){
   },0);
   return`
   <div class="song-card" id="card-${song.id}">
-    <div class="song-card-header" onclick="toggleCard('body-${song.id}')">
+    <div class="song-card-header" onclick="toggleCard('body-${song.id}','${song.id}')">
       <div class="song-title-area">
         <div class="song-avatar" id="${covId}">🎵</div>
         <div class="song-meta">
@@ -540,10 +538,18 @@ function renderSongCard(song){
   </div>`;
 }
 
-function toggleCard(bodyId){
-  const body=document.getElementById(bodyId);const songId=bodyId.replace('body-','');const chevron=document.getElementById('chevron-'+songId);
-  const isOpen=!body.classList.contains('hidden');body.classList.toggle('hidden');
+function toggleCard(bodyId, songId){
+  const body=document.getElementById(bodyId);
+  const chevron=document.getElementById('chevron-'+songId);
+  const isOpen=!body.classList.contains('hidden');
+  body.classList.toggle('hidden');
   if(chevron)chevron.style.transform=isOpen?'':'rotate(180deg)';
+  // Actualizar sidebar destacando la canción activa
+  document.querySelectorAll('.song-link').forEach(l=>l.classList.remove('active'));
+  if(!isOpen){
+    const link=document.querySelector(`.song-link[data-id="${songId}"]`);
+    if(link)link.classList.add('active');
+  }
 }
 function toggleAccordion(header){header.classList.toggle('open');header.nextElementSibling.classList.toggle('open');}
 
@@ -565,17 +571,37 @@ function renderWeekly(){
   }).join('');
 }
 
+// Solo muestra canciones con semana activa; al clicar despliega su tarjeta
 function renderSidebar(){
   const q=(document.getElementById('sidebarSearch').value||'').toLowerCase();
+  const active=db.filter(s=>(s.weeks||[]).some(w=>isCurrentWeek(w)));
+  const filtered=active.filter(s=>!q||s.artist.toLowerCase().includes(q)||s.song.toLowerCase().includes(q));
   let html='';
-  db.filter(s=>!q||s.artist.toLowerCase().includes(q)||s.song.toLowerCase().includes(q))
-    .forEach(s=>{html+=`<span class="song-link" onclick="jumpTo('${s.id}')"><span class="song-link-artist">${s.artist}</span><span class="song-link-sep">·</span>${s.song}</span>`;});
-  document.getElementById('artistTree').innerHTML=html||`<p style="font-size:12px;color:var(--muted);padding:.5rem 8px">Sin resultados</p>`;
+  filtered.forEach(s=>{
+    html+=`<span class="song-link" data-id="${s.id}" onclick="jumpTo('${s.id}')"><span class="song-link-artist">${s.artist}</span><span class="song-link-sep">·</span>${s.song}</span>`;
+  });
+  document.getElementById('artistTree').innerHTML=html||`<p style="font-size:12px;color:var(--muted);padding:.5rem 8px">Sin canciones esta semana</p>`;
 }
 
+// Abre y despliega la tarjeta de la canción, cambiando a vista semanal si hace falta
 function jumpTo(id){
-  switchView('weekly',document.querySelector('.nav-tab'));
-  setTimeout(()=>{document.getElementById('card-'+id)?.scrollIntoView({behavior:'smooth',block:'start'});},120);
+  if(currentView!=='weekly'){
+    switchView('weekly',document.querySelector('.nav-tab'));
+  }
+  setTimeout(()=>{
+    const card=document.getElementById('card-'+id);
+    if(!card)return;
+    // Desplegar si está cerrada
+    const body=document.getElementById('body-'+id);
+    if(body&&body.classList.contains('hidden')){
+      toggleCard('body-'+id, id);
+    }
+    card.scrollIntoView({behavior:'smooth',block:'start'});
+    // Marcar activo en sidebar
+    document.querySelectorAll('.song-link').forEach(l=>l.classList.remove('active'));
+    const link=document.querySelector(`.song-link[data-id="${id}"]`);
+    if(link)link.classList.add('active');
+  },80);
 }
 
 function renderHistory(){
