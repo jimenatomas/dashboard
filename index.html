@@ -33,7 +33,6 @@ body{font-family:system-ui,sans-serif;background:#f5f5f0;color:#1a1a18;min-heigh
 .song-link:hover{background:var(--surface);color:#1a1a18}
 .song-link-artist{font-weight:500;color:#1a1a18}
 .song-link-sep{color:var(--border);margin:0 4px}
-/* (1) Espacio reducido entre tarjetas */
 .song-card{background:var(--card);border:0.5px solid var(--border);border-radius:12px;margin-bottom:.375rem;overflow:hidden}
 .song-card-header{padding:1rem 1.25rem;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;cursor:pointer;user-select:none}
 .song-card-header:hover{background:#fafaf8}
@@ -65,11 +64,11 @@ body{font-family:system-ui,sans-serif;background:#f5f5f0;color:#1a1a18;min-heigh
 .stat-dot{width:7px;height:7px;border-radius:50%;display:inline-block}
 .spotify-dot{background:#1DB954}
 .tiktok-dot{background:#ff0050}
-/* (2) Grid de vídeos: más ancho por miniatura, sin recorte */
-.videos-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:.5rem}
+/* Vídeos: miniaturas más anchas en columna única para que el iframe tenga espacio y no recorte */
+.videos-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-top:.5rem}
 .video-thumb{border-radius:8px;overflow:hidden;border:0.5px solid var(--border);aspect-ratio:9/16;background:var(--surface);position:relative}
-.video-thumb iframe{width:100%;height:100%;border:none;display:block}
-.video-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.08);opacity:0;transition:opacity .2s}
+.video-thumb iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:none}
+.video-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.06);opacity:0;transition:opacity .2s;pointer-events:none}
 .video-thumb:hover .video-overlay{opacity:1}
 .video-overlay i{font-size:28px;color:#fff}
 .week-accordion{border:0.5px solid var(--border);border-radius:8px;overflow:hidden;margin-top:.5rem}
@@ -349,19 +348,9 @@ function videosGrid(videos){
   if(!videos||!videos.length)return'';
   return`<div class="videos-grid">${videos.map(v=>{
     const m=v.match(/tiktok\.com\/@([^/]+)\/(video|photo)\/(\d+)/);
-    if(m){
-      // (2) Link directo a TikTok en lugar de iframe para evitar recorte
-      return`<a href="${v}" target="_blank" rel="noopener" style="display:block;border-radius:8px;overflow:hidden;border:0.5px solid var(--border);aspect-ratio:9/16;background:var(--surface);position:relative;text-decoration:none">
-        <img src="https://www.tiktok.com/api/img/?itemId=${m[3]}&location=0" onerror="this.style.display='none'" style="width:100%;height:100%;object-fit:cover;display:block" alt="">
-        <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding:.5rem;background:linear-gradient(transparent 50%,rgba(0,0,0,.55))">
-          <span style="font-size:11px;color:#fff;font-weight:500;text-align:center;word-break:break-all;opacity:.9">Ver en TikTok</span>
-        </div>
-        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:40px;height:40px;background:rgba(0,0,0,.5);border-radius:50%;display:flex;align-items:center;justify-content:center">
-          <i class="ti ti-brand-tiktok" style="font-size:20px;color:#fff"></i>
-        </div>
-      </a>`;
-    }
-    return`<a href="${v}" target="_blank" style="border:0.5px solid var(--border);border-radius:8px;padding:.5rem;font-size:12px;color:var(--c1);display:flex;align-items:center;gap:6px"><i class="ti ti-external-link"></i>${v.slice(0,40)}...</a>`;
+    return m
+      ?`<div class="video-thumb"><iframe src="https://www.tiktok.com/embed/v2/${m[3]}" allowfullscreen scrolling="no" allow="encrypted-media;autoplay"></iframe><a href="${v}" target="_blank" style="position:absolute;inset:0"><div class="video-overlay"><i class="ti ti-external-link"></i></div></a></div>`
+      :`<a href="${v}" target="_blank" style="border:0.5px solid var(--border);border-radius:8px;padding:.5rem;font-size:12px;color:var(--c1);display:flex;align-items:center;gap:6px"><i class="ti ti-external-link"></i>${v.slice(0,40)}...</a>`;
   }).join('')}</div>`;
 }
 
