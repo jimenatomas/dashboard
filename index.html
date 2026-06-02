@@ -123,6 +123,14 @@ body{font-family:system-ui,sans-serif;background:#f5f5f0;color:#1a1a18;min-heigh
 .fav-remove:hover{background:var(--starl)}
 .modal-divider{border:none;border-top:0.5px solid var(--border);margin:1.25rem 0}
 .readonly-banner{background:var(--c1l);border-bottom:0.5px solid var(--border);padding:8px 1.5rem;font-size:12px;color:var(--c1d);display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:50}
+/* Notas */
+.notes-box{background:#FFFBF0;border:0.5px solid #E8DFC0;border-radius:8px;padding:.75rem 1rem;font-size:13px;line-height:1.6;color:#3a3520;white-space:pre-wrap;min-height:2rem}
+.notes-edit{width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:8px;background:#FFFBF0;font-size:13px;color:#3a3520;font-family:inherit;outline:none;resize:vertical;min-height:80px;line-height:1.6}
+.notes-edit:focus{border-color:#C9A84C}
+.notes-actions{display:flex;justify-content:flex-end;gap:6px;margin-top:6px}
+.btn-notes-save{background:#C9A84C;color:#fff;border-color:#C9A84C;font-size:12px;padding:5px 12px}
+.btn-notes-save:hover{background:#a8893a}
+.btn-notes-cancel{font-size:12px;padding:5px 12px}
 </style>
 </head>
 <body>
@@ -350,6 +358,76 @@ function autoWeek(val,hiddenId,labelId){
   document.getElementById(hiddenId).value=label;document.getElementById(labelId).textContent=`→ ${label}`;
 }
 
+// ── NOTAS ─────────────────────────────────────────────────────────────
+// Las notas son por canción (no por semana), guardadas en song.notes
+function renderNotesSection(songId){
+  if(readOnly){
+    const song=db.find(s=>s.id===songId);
+    if(!song?.notes)return'';
+    return`<div>
+      <div class="section-label"><i class="ti ti-notes" style="font-size:14px;color:var(--muted)"></i> Notas</div>
+      <div class="notes-box">${escHtml(song.notes)}</div>
+    </div>`;
+  }
+  const song=db.find(s=>s.id===songId);
+  const notes=song?.notes||'';
+  return`<div id="notes-section-${songId}">
+    <div class="section-label" style="justify-content:space-between">
+      <span style="display:flex;align-items:center;gap:6px"><i class="ti ti-notes" style="font-size:14px;color:var(--muted)"></i> Notas</span>
+      <button class="btn" style="font-size:11px;padding:3px 8px" onclick="editNotes('${songId}')"><i class="ti ti-edit" style="font-size:11px"></i> ${notes?'Editar':'Añadir nota'}</button>
+    </div>
+    ${notes
+      ?`<div class="notes-box" id="notes-display-${songId}">${escHtml(notes)}</div>`
+      :`<div class="no-data" id="notes-display-${songId}" style="font-size:12px">Sin notas aún</div>`
+    }
+    <div id="notes-editor-${songId}" class="hidden">
+      <textarea class="notes-edit" id="notes-textarea-${songId}">${escHtml(notes)}</textarea>
+      <div class="notes-actions">
+        <button class="btn btn-notes-cancel" onclick="cancelNotes('${songId}')">Cancelar</button>
+        <button class="btn btn-notes-save" onclick="saveNotes('${songId}')"><i class="ti ti-check"></i> Guardar nota</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function escHtml(str){
+  return(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+}
+
+function editNotes(songId){
+  document.getElementById(`notes-display-${songId}`).classList.add('hidden');
+  document.getElementById(`notes-editor-${songId}`).classList.remove('hidden');
+  document.getElementById(`notes-textarea-${songId}`).focus();
+}
+function cancelNotes(songId){
+  document.getElementById(`notes-display-${songId}`).classList.remove('hidden');
+  document.getElementById(`notes-editor-${songId}`).classList.add('hidden');
+  // restaurar valor original
+  const song=db.find(s=>s.id===songId);
+  document.getElementById(`notes-textarea-${songId}`).value=song?.notes||'';
+}
+function saveNotes(songId){
+  const song=db.find(s=>s.id===songId);if(!song)return;
+  const val=document.getElementById(`notes-textarea-${songId}`).value.trim();
+  song.notes=val;save();
+  // actualizar display sin rerenderizar toda la card
+  const display=document.getElementById(`notes-display-${songId}`);
+  if(val){
+    display.className='notes-box';
+    display.innerHTML=escHtml(val);
+  }else{
+    display.className='no-data';
+    display.style.fontSize='12px';
+    display.innerHTML='Sin notas aún';
+  }
+  // actualizar botón
+  const section=document.getElementById(`notes-section-${songId}`);
+  const btn=section.querySelector('.section-label button');
+  if(btn)btn.innerHTML=`<i class="ti ti-edit" style="font-size:11px"></i> ${val?'Editar':'Añadir nota'}`;
+  cancelNotes(songId);
+  showToast('Nota guardada');
+}
+
 // ── CSV ───────────────────────────────────────────────────────────────
 function parseSpotifyRows(rows){
   const hasSpotifyCol=rows.some(r=>parseInt(r['Spotify']||r['spotify']||0)>0);
@@ -414,20 +492,16 @@ function videosGrid(videos){
   return`<div class="videos-grid">${videos.map(v=>{const m=v.match(/tiktok\.com\/@([^/]+)\/(video|photo)\/(\d+)/);return m?`<div class="video-thumb"><iframe src="https://www.tiktok.com/embed/v2/${m[3]}" allowfullscreen scrolling="no" allow="encrypted-media;autoplay"></iframe><a href="${v}" target="_blank" style="position:absolute;inset:0"><div class="video-overlay"><i class="ti ti-external-link"></i></div></a></div>`:`<a href="${v}" target="_blank" style="border:0.5px solid var(--border);border-radius:8px;padding:.5rem;font-size:12px;color:var(--c1);display:flex;align-items:center;gap:6px"><i class="ti ti-external-link"></i>${v.slice(0,40)}...</a>`;}).join('')}</div>`;
 }
 
-// ── SHARE con compresión LZString + TinyURL ───────────────────────────
+// ── SHARE ─────────────────────────────────────────────────────────────
 function encodePayload(payload){
-  // Comprime con LZString y marca con prefijo 'lz:' para distinguir del formato antiguo
   return'lz:'+LZString.compressToEncodedURIComponent(JSON.stringify(payload));
 }
 function decodePayload(encoded){
   if(encoded.startsWith('lz:')){
-    // Formato nuevo: comprimido con LZString
     return JSON.parse(LZString.decompressFromEncodedURIComponent(encoded.slice(3)));
   }
-  // Formato antiguo: base64 sin comprimir (compatibilidad)
   return JSON.parse(decodeURIComponent(escape(atob(encoded))));
 }
-
 async function copyShareLink(payload){
   const encoded=encodePayload(payload);
   const longUrl=`${location.href.split('?')[0].split('#')[0]}#view=${encoded}`;
@@ -442,16 +516,12 @@ async function copyShareLink(payload){
     navigator.clipboard.writeText(longUrl).then(()=>showToast('Enlace copiado (sin acortar)')).catch(()=>prompt('Copia este enlace:',longUrl));
   }
 }
-
-async function shareDashboard(){
-  await copyShareLink({type:'dashboard',songs:db});
-}
+async function shareDashboard(){await copyShareLink({type:'dashboard',songs:db});}
 async function shareSong(songId){
   const song=db.find(s=>s.id===songId);if(!song)return;
   await copyShareLink({type:'song',song});
 }
 
-// ── DETECCIÓN MODO SOLO LECTURA ───────────────────────────────────────
 function checkViewMode(){
   const hash=location.hash;
   if(!hash.startsWith('#view='))return false;
@@ -559,6 +629,7 @@ function renderSongCard(song){
           return`<div class="week-accordion" style="margin-top:.75rem"><div class="week-accordion-header" onclick="toggleAccordion(this)"><span><i class="ti ti-history" style="margin-right:6px;font-size:12px"></i>${w.week||'Semana anterior'}</span><div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;font-weight:400">${wv.length} vídeo${wv.length!==1?'s':''}</span><i class="ti ti-chevron-down chevron"></i></div></div><div class="week-accordion-body">${w.trend?`<div style="font-size:12px;color:var(--muted);margin-bottom:.75rem;line-height:1.5"><span style="font-weight:500;color:#1a1a18">Tendencia:</span> ${w.trend}</div>`:''}<div style="display:flex;justify-content:flex-end;margin-bottom:.5rem">${editOldBtn}</div>${wv.length?videosGrid(wv):'<div class="no-data">Sin vídeos</div>'}</div></div>`;
         }).join('')}
       </div>
+      ${renderNotesSection(song.id)}
     </div>
   </div>`;
 }
@@ -728,7 +799,7 @@ function saveSong(){
   if(readOnly)return;
   const artist=document.getElementById('fArtist').value.trim();const song=document.getElementById('fSong').value.trim();
   if(!artist||!song){alert('Artista y canción son obligatorios');return;}
-  const s={id:uid(),artist,song,insights:document.getElementById('fInsights').value.trim(),melodyIQ:document.getElementById('fMelodyIQ').value.trim(),weeks:[]};
+  const s={id:uid(),artist,song,insights:document.getElementById('fInsights').value.trim(),melodyIQ:document.getElementById('fMelodyIQ').value.trim(),notes:'',weeks:[]};
   db.push(s);save();closeModal('modalBg');renderAll();showWeekModal(s.id,null);
 }
 
@@ -813,7 +884,7 @@ function renderAll(){renderWeekly();renderSidebar();if(currentView==='history'){
 
 if(!db.length){
   const today=new Date().toISOString().slice(0,10);
-  db=[{id:uid(),artist:'Cano',song:'Así Nací y Así Moriré',insights:'https://insights.sonymusic.com/song/ES5022600132/tiktok?country=ES',melodyIQ:'',weeks:[{id:uid(),date:today,week:getCurrentWeekLabel(),archived:false,trend:'Fotos con tu pareja con la letra "Siendo tú mi lugar favorito, tengo más de lo que necesito" y copys románticos en general.',tags:['carrusel fotos','ugc','pareja','romántico'],spotifyData:null,tiktokData:null,videos:['https://www.tiktok.com/@brunoflorenciano/photo/7636402153451506947','https://www.tiktok.com/@087008i/photo/7638408042626764054','https://www.tiktok.com/@55grccc/photo/7636706227657116930','https://www.tiktok.com/@marinaglvz02/photo/7637650040839818518']}]}];
+  db=[{id:uid(),artist:'Cano',song:'Así Nací y Así Moriré',insights:'https://insights.sonymusic.com/song/ES5022600132/tiktok?country=ES',melodyIQ:'',notes:'',weeks:[{id:uid(),date:today,week:getCurrentWeekLabel(),archived:false,trend:'Fotos con tu pareja con la letra "Siendo tú mi lugar favorito, tengo más de lo que necesito" y copys románticos en general.',tags:['carrusel fotos','ugc','pareja','romántico'],spotifyData:null,tiktokData:null,videos:['https://www.tiktok.com/@brunoflorenciano/photo/7636402153451506947','https://www.tiktok.com/@087008i/photo/7638408042626764054','https://www.tiktok.com/@55grccc/photo/7636706227657116930','https://www.tiktok.com/@marinaglvz02/photo/7637650040839818518']}]}];
   save();
 }
 
