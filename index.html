@@ -123,7 +123,6 @@ body{font-family:system-ui,sans-serif;background:#f5f5f0;color:#1a1a18;min-heigh
 .fav-remove:hover{background:var(--starl)}
 .modal-divider{border:none;border-top:0.5px solid var(--border);margin:1.25rem 0}
 .readonly-banner{background:var(--c1l);border-bottom:0.5px solid var(--border);padding:8px 1.5rem;font-size:12px;color:var(--c1d);display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:50}
-/* Notas */
 .notes-box{background:#FFFBF0;border:0.5px solid #E8DFC0;border-radius:8px;padding:.75rem 1rem;font-size:13px;line-height:1.6;color:#3a3520;white-space:pre-wrap;min-height:2rem}
 .notes-edit{width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:8px;background:#FFFBF0;font-size:13px;color:#3a3520;font-family:inherit;outline:none;resize:vertical;min-height:80px;line-height:1.6}
 .notes-edit:focus{border-color:#C9A84C}
@@ -359,7 +358,6 @@ function autoWeek(val,hiddenId,labelId){
 }
 
 // ── NOTAS ─────────────────────────────────────────────────────────────
-// Las notas son por canción (no por semana), guardadas en song.notes
 function renderNotesSection(songId){
   if(readOnly){
     const song=db.find(s=>s.id===songId);
@@ -389,11 +387,9 @@ function renderNotesSection(songId){
     </div>
   </div>`;
 }
-
 function escHtml(str){
   return(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
 }
-
 function editNotes(songId){
   document.getElementById(`notes-display-${songId}`).classList.add('hidden');
   document.getElementById(`notes-editor-${songId}`).classList.remove('hidden');
@@ -402,7 +398,6 @@ function editNotes(songId){
 function cancelNotes(songId){
   document.getElementById(`notes-display-${songId}`).classList.remove('hidden');
   document.getElementById(`notes-editor-${songId}`).classList.add('hidden');
-  // restaurar valor original
   const song=db.find(s=>s.id===songId);
   document.getElementById(`notes-textarea-${songId}`).value=song?.notes||'';
 }
@@ -410,17 +405,9 @@ function saveNotes(songId){
   const song=db.find(s=>s.id===songId);if(!song)return;
   const val=document.getElementById(`notes-textarea-${songId}`).value.trim();
   song.notes=val;save();
-  // actualizar display sin rerenderizar toda la card
   const display=document.getElementById(`notes-display-${songId}`);
-  if(val){
-    display.className='notes-box';
-    display.innerHTML=escHtml(val);
-  }else{
-    display.className='no-data';
-    display.style.fontSize='12px';
-    display.innerHTML='Sin notas aún';
-  }
-  // actualizar botón
+  if(val){display.className='notes-box';display.innerHTML=escHtml(val);}
+  else{display.className='no-data';display.style.fontSize='12px';display.innerHTML='Sin notas aún';}
   const section=document.getElementById(`notes-section-${songId}`);
   const btn=section.querySelector('.section-label button');
   if(btn)btn.innerHTML=`<i class="ti ti-edit" style="font-size:11px"></i> ${val?'Editar':'Añadir nota'}`;
@@ -718,6 +705,7 @@ function jumpTo(id){
   },80);
 }
 
+// ── HISTÓRICO — con botón Nueva semana ───────────────────────────────
 function renderHistory(){
   const q=(document.getElementById('histSearch').value||'').toLowerCase();
   const fA=document.getElementById('filterArtist').value,fW=document.getElementById('filterWeek').value;
@@ -736,9 +724,10 @@ function renderHistory(){
         <div class="history-meta">${r.week||'—'}</div>
         <div class="history-trend">${r.trend||'—'}</div>
       </div>
-      <div style="display:flex;gap:6px">
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
         <button class="btn" style="font-size:12px;padding:5px 10px" onclick="viewWeek('${r.songId}','${r.id}')"><i class="ti ti-eye"></i> Ver</button>
-        ${readOnly?'':` <button class="btn" style="font-size:12px;padding:5px 10px" onclick="showWeekModal('${r.songId}','${r.id}')"><i class="ti ti-edit"></i></button>
+        ${readOnly?'':` <button class="btn btn-new-week" style="font-size:12px" onclick="showWeekModal('${r.songId}',null)"><i class="ti ti-plus"></i> Nueva semana</button>
+        <button class="btn" style="font-size:12px;padding:5px 10px" onclick="showWeekModal('${r.songId}','${r.id}')"><i class="ti ti-edit"></i></button>
         <button class="btn" style="font-size:12px;padding:5px 10px;color:var(--danger)" onclick="deleteWeek('${r.songId}','${r.id}')"><i class="ti ti-trash"></i></button>`}
       </div>
     </div>`).join('');
