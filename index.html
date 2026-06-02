@@ -411,8 +411,7 @@ function saveNotes(songId){
   const section=document.getElementById(`notes-section-${songId}`);
   const btn=section.querySelector('.section-label button');
   if(btn)btn.innerHTML=`<i class="ti ti-edit" style="font-size:11px"></i> ${val?'Editar':'Añadir nota'}`;
-  cancelNotes(songId);
-  showToast('Nota guardada');
+  cancelNotes(songId);showToast('Nota guardada');
 }
 
 // ── CSV ───────────────────────────────────────────────────────────────
@@ -548,24 +547,54 @@ function songLinks(song){
   return html;
 }
 
-function renderSongCard(song){
-  const weeks=song.weeks||[];
-  const sorted=[...weeks].sort((a,b)=>b.week.localeCompare(a.week));
-  const latest=sorted[0];const older=sorted.slice(1);
-  if(!latest)return'';
-  const covId=`cover-${song.id}`;
-  const tags=(latest.tags||[]).filter(Boolean);const videos=(latest.videos||[]).filter(Boolean);
-  const hasSpotify=latest.spotifyData&&latest.spotifyData.length>0;
-  const hasTikTok=latest.tiktokData&&(latest.tiktokData.creations>0||latest.tiktokData.views>0);
-  const hasTikDaily=hasTikTok&&latest.tiktokData.daily&&latest.tiktokData.daily.length>1;
-  const spotChartId=`schart-${song.id}`,tikChartId=`tchart-${song.id}`;
+function renderWeekData(w, songId, isLatest){
+  const tags=(w.tags||[]).filter(Boolean);
+  const videos=(w.videos||[]).filter(Boolean);
+  const hasSpotify=w.spotifyData&&w.spotifyData.length>0;
+  const hasTikTok=w.tiktokData&&(w.tiktokData.creations>0||w.tiktokData.views>0);
+  const hasTikDaily=hasTikTok&&w.tiktokData.daily&&w.tiktokData.daily.length>1;
+  const spotChartId=`schart-${songId}-${w.id}`;
+  const tikChartId=`tchart-${songId}-${w.id}`;
   let spotTotal=0,spotAvg=0,spotMax=0;
-  if(hasSpotify){spotTotal=latest.spotifyData.reduce((s,d)=>s+d.streams,0);spotAvg=Math.round(spotTotal/latest.spotifyData.length);spotMax=Math.max(...latest.spotifyData.map(d=>d.streams));}
+  if(hasSpotify){spotTotal=w.spotifyData.reduce((s,d)=>s+d.streams,0);spotAvg=Math.round(spotTotal/w.spotifyData.length);spotMax=Math.max(...w.spotifyData.map(d=>d.streams));}
+  setTimeout(()=>{
+    if(hasSpotify){const labels=w.spotifyData.map(d=>{const dt=new Date(d.date);return`${dt.getDate()}/${dt.getMonth()+1}`;});renderChart(spotChartId,labels,w.spotifyData.map(d=>d.streams),'#1DB954');}
+    if(hasTikDaily){const labels=w.tiktokData.daily.map(d=>{const dt=new Date(d.date);return`${dt.getDate()}/${dt.getMonth()+1}`;});renderChart(tikChartId,labels,w.tiktokData.daily.map(d=>d.creations),'#ff0050');}
+  },0);
+  const editWeekBtn=readOnly?'':` <button class="btn" style="font-size:11px;padding:3px 8px" onclick="showWeekModal('${songId}','${w.id}')"><i class="ti ti-edit" style="font-size:11px"></i> Editar</button>`;
+  return`
+    <div>
+      <div class="section-label"><i class="ti ti-flame" style="font-size:14px;color:#BA7517"></i> Tendencia</div>
+      <div class="trend-box">${w.trend||'—'}${tags.length?`<div class="trend-tags">${tags.map(t=>`<span class="tag tag-trend">${t.trim()}</span>`).join('')}</div>`:''}</div>
+    </div>
+    <div class="data-section">
+      <div>
+        <div class="section-label"><span class="stat-dot spotify-dot"></span> Spotify</div>
+        ${hasSpotify?`<div class="stats-row"><div class="stat-pill"><div class="stat-pill-val" style="color:#1DB954">${fmtNum(spotTotal)}</div><div class="stat-pill-label">Past 28 days</div></div><div class="stat-pill"><div class="stat-pill-val" style="color:#1DB954">${fmtNum(spotAvg)}</div><div class="stat-pill-label">Media/día</div></div><div class="stat-pill"><div class="stat-pill-val" style="color:#1DB954">${fmtNum(spotMax)}</div><div class="stat-pill-label">Pico</div></div></div><div class="chart-wrap"><div style="height:130px"><canvas id="${spotChartId}"></canvas></div></div>`:`<div class="no-data"><i class="ti ti-upload" style="display:block;font-size:22px;margin-bottom:.35rem"></i>Sin datos de Spotify</div>`}
+      </div>
+      <div>
+        <div class="section-label"><span class="stat-dot tiktok-dot"></span> TikTok${hasTikTok&&w.tiktokData.period?` <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px">${w.tiktokData.period}</span>`:''}</div>
+        ${hasTikTok?`<div class="tiktok-grid"><div class="tik-stat tik-stat-main"><i class="ti ti-plus tik-stat-icon"></i><div><div class="tik-stat-val">${fmtNum(w.tiktokData.creations)}</div><div class="tik-stat-label">creaciones</div></div></div><div class="tik-stat"><i class="ti ti-eye tik-stat-icon"></i><div><div class="tik-stat-val">${fmtNum(w.tiktokData.views)}</div><div class="tik-stat-label">views</div></div></div><div class="tik-stat"><i class="ti ti-heart tik-stat-icon"></i><div><div class="tik-stat-val">${fmtNum(w.tiktokData.likes)}</div><div class="tik-stat-label">likes</div></div></div><div class="tik-stat"><i class="ti ti-share tik-stat-icon"></i><div><div class="tik-stat-val">${fmtNum(w.tiktokData.shares)}</div><div class="tik-stat-label">shares</div></div></div><div class="tik-stat"><i class="ti ti-bookmark tik-stat-icon"></i><div><div class="tik-stat-val">${fmtNum(w.tiktokData.favorites)}</div><div class="tik-stat-label">favoritos</div></div></div><div class="tik-stat"><i class="ti ti-message tik-stat-icon"></i><div><div class="tik-stat-val">${fmtNum(w.tiktokData.comments)}</div><div class="tik-stat-label">comentarios</div></div></div></div>${hasTikDaily?`<div class="chart-wrap"><div style="height:130px"><canvas id="${tikChartId}"></canvas></div></div>`:''}`:`<div class="no-data">Sin datos de TikTok</div>`}
+      </div>
+    </div>
+    <div>
+      <div class="section-label"><i class="ti ti-brand-tiktok" style="font-size:14px;color:#ff0050"></i> Ejemplos</div>
+      ${videos.length?`<div style="margin-bottom:.5rem;font-size:11px;font-weight:500;color:var(--muted);display:flex;align-items:center;justify-content:space-between"><span><i class="ti ti-calendar" style="font-size:12px;margin-right:4px"></i>${w.week}</span>${editWeekBtn}</div>${videosGrid(videos)}`:`<div class="no-data" style="display:flex;align-items:center;justify-content:space-between"><span>Sin vídeos esta semana</span>${editWeekBtn}</div>`}
+    </div>`;
+}
+
+function renderSongCard(song){
+  const allWeeks=[...( song.weeks||[])].sort((a,b)=>b.week.localeCompare(a.week));
+  // latest = semana actual (no archivada), older = el resto ordenado
+  const latest=allWeeks.find(w=>!w.archived)||allWeeks[0];
+  if(!latest)return'';
+  const older=allWeeks.filter(w=>w.id!==latest.id);
+  const covId=`cover-${song.id}`;
+
   setTimeout(async()=>{
-    const url=await fetchCover(song.artist,song.song);const el=document.getElementById(covId);
+    const url=await fetchCover(song.artist,song.song);
+    const el=document.getElementById(covId);
     if(el&&url)el.innerHTML=`<img src="${url}" style="width:100%;height:100%;object-fit:cover;border-radius:8px" alt="portada">`;
-    if(hasSpotify){const labels=latest.spotifyData.map(d=>{const dt=new Date(d.date);return`${dt.getDate()}/${dt.getMonth()+1}`;});renderChart(spotChartId,labels,latest.spotifyData.map(d=>d.streams),'#1DB954');}
-    if(hasTikDaily){const labels=latest.tiktokData.daily.map(d=>{const dt=new Date(d.date);return`${dt.getDate()}/${dt.getMonth()+1}`;});renderChart(tikChartId,labels,latest.tiktokData.daily.map(d=>d.creations),'#ff0050');}
   },0);
 
   const editBtns=readOnly?'':`
@@ -573,7 +602,19 @@ function renderSongCard(song){
     <button class="btn" style="padding:5px 10px;font-size:12px;color:var(--c2d);background:var(--c2l);border-color:var(--c2l)" onclick="event.stopPropagation();shareSong('${song.id}')"><i class="ti ti-share"></i> Compartir</button>
     <button class="btn" style="padding:5px 10px;font-size:12px" onclick="event.stopPropagation();showSongEditModal('${song.id}')"><i class="ti ti-edit"></i></button>
     <button class="btn" style="padding:5px 10px;font-size:12px;color:var(--danger)" onclick="event.stopPropagation();deleteSong('${song.id}')"><i class="ti ti-trash"></i></button>`;
-  const editWeekBtn=readOnly?'':` <button class="btn" style="font-size:11px;padding:3px 8px" onclick="showWeekModal('${song.id}','${latest.id}')"><i class="ti ti-edit" style="font-size:11px"></i> Editar</button>`;
+
+  const olderAccordions=older.map(w=>`
+    <div class="week-accordion" style="margin-top:.75rem">
+      <div class="week-accordion-header" onclick="toggleAccordion(this)">
+        <span><i class="ti ti-history" style="margin-right:6px;font-size:12px"></i>${w.week||'Semana anterior'}</span>
+        <i class="ti ti-chevron-down chevron"></i>
+      </div>
+      <div class="week-accordion-body">
+        <div style="display:flex;flex-direction:column;gap:1.25rem">
+          ${renderWeekData(w,song.id,false)}
+        </div>
+      </div>
+    </div>`).join('');
 
   return`
   <div class="song-card" id="card-${song.id}">
@@ -593,29 +634,8 @@ function renderSongCard(song){
       </div>
     </div>
     <div class="song-card-body hidden" id="body-${song.id}">
-      <div>
-        <div class="section-label"><i class="ti ti-flame" style="font-size:14px;color:#BA7517"></i> Tendencia</div>
-        <div class="trend-box">${latest.trend||'—'}${tags.length?`<div class="trend-tags">${tags.map(t=>`<span class="tag tag-trend">${t.trim()}</span>`).join('')}</div>`:''}</div>
-      </div>
-      <div class="data-section">
-        <div>
-          <div class="section-label"><span class="stat-dot spotify-dot"></span> Spotify</div>
-          ${hasSpotify?`<div class="stats-row"><div class="stat-pill"><div class="stat-pill-val" style="color:#1DB954">${fmtNum(spotTotal)}</div><div class="stat-pill-label">Past 28 days</div></div><div class="stat-pill"><div class="stat-pill-val" style="color:#1DB954">${fmtNum(spotAvg)}</div><div class="stat-pill-label">Media/día</div></div><div class="stat-pill"><div class="stat-pill-val" style="color:#1DB954">${fmtNum(spotMax)}</div><div class="stat-pill-label">Pico</div></div></div><div class="chart-wrap"><div style="height:130px"><canvas id="${spotChartId}"></canvas></div></div>`:`<div class="no-data"><i class="ti ti-upload" style="display:block;font-size:22px;margin-bottom:.35rem"></i>Sin datos de Spotify</div>`}
-        </div>
-        <div>
-          <div class="section-label"><span class="stat-dot tiktok-dot"></span> TikTok${hasTikTok&&latest.tiktokData.period?` <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px">${latest.tiktokData.period}</span>`:''}</div>
-          ${hasTikTok?`<div class="tiktok-grid"><div class="tik-stat tik-stat-main"><i class="ti ti-plus tik-stat-icon"></i><div><div class="tik-stat-val">${fmtNum(latest.tiktokData.creations)}</div><div class="tik-stat-label">creaciones</div></div></div><div class="tik-stat"><i class="ti ti-eye tik-stat-icon"></i><div><div class="tik-stat-val">${fmtNum(latest.tiktokData.views)}</div><div class="tik-stat-label">views</div></div></div><div class="tik-stat"><i class="ti ti-heart tik-stat-icon"></i><div><div class="tik-stat-val">${fmtNum(latest.tiktokData.likes)}</div><div class="tik-stat-label">likes</div></div></div><div class="tik-stat"><i class="ti ti-share tik-stat-icon"></i><div><div class="tik-stat-val">${fmtNum(latest.tiktokData.shares)}</div><div class="tik-stat-label">shares</div></div></div><div class="tik-stat"><i class="ti ti-bookmark tik-stat-icon"></i><div><div class="tik-stat-val">${fmtNum(latest.tiktokData.favorites)}</div><div class="tik-stat-label">favoritos</div></div></div><div class="tik-stat"><i class="ti ti-message tik-stat-icon"></i><div><div class="tik-stat-val">${fmtNum(latest.tiktokData.comments)}</div><div class="tik-stat-label">comentarios</div></div></div></div>${hasTikDaily?`<div class="chart-wrap"><div style="height:130px"><canvas id="${tikChartId}"></canvas></div></div>`:''}`:`<div class="no-data">Sin datos de TikTok</div>`}
-        </div>
-      </div>
-      <div>
-        <div class="section-label"><i class="ti ti-brand-tiktok" style="font-size:14px;color:#ff0050"></i> Ejemplos</div>
-        ${videos.length?`<div style="margin-bottom:.5rem;font-size:11px;font-weight:500;color:var(--muted);display:flex;align-items:center;justify-content:space-between"><span><i class="ti ti-calendar" style="font-size:12px;margin-right:4px"></i>${latest.week}</span>${editWeekBtn}</div>${videosGrid(videos)}`:`<div class="no-data">Sin vídeos esta semana</div>`}
-        ${older.map(w=>{
-          const wv=(w.videos||[]).filter(Boolean);
-          const editOldBtn=readOnly?'':` <button class="btn" style="font-size:11px;padding:3px 8px" onclick="showWeekModal('${song.id}','${w.id}')"><i class="ti ti-edit" style="font-size:11px"></i> Editar semana</button>`;
-          return`<div class="week-accordion" style="margin-top:.75rem"><div class="week-accordion-header" onclick="toggleAccordion(this)"><span><i class="ti ti-history" style="margin-right:6px;font-size:12px"></i>${w.week||'Semana anterior'}</span><div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;font-weight:400">${wv.length} vídeo${wv.length!==1?'s':''}</span><i class="ti ti-chevron-down chevron"></i></div></div><div class="week-accordion-body">${w.trend?`<div style="font-size:12px;color:var(--muted);margin-bottom:.75rem;line-height:1.5"><span style="font-weight:500;color:#1a1a18">Tendencia:</span> ${w.trend}</div>`:''}<div style="display:flex;justify-content:flex-end;margin-bottom:.5rem">${editOldBtn}</div>${wv.length?videosGrid(wv):'<div class="no-data">Sin vídeos</div>'}</div></div>`;
-        }).join('')}
-      </div>
+      ${renderWeekData(latest,song.id,true)}
+      ${older.length?`<div>${olderAccordions}</div>`:''}
       ${renderNotesSection(song.id)}
     </div>
   </div>`;
@@ -676,10 +696,8 @@ function renderWeekly(){
   const container=document.getElementById('songCards'),empty=document.getElementById('emptyState');
   if(!active.length){container.innerHTML='';empty.classList.remove('hidden');return;}
   empty.classList.add('hidden');
-  container.innerHTML=active.map(s=>{
-    const weekSong={...s,weeks:s.weeks.filter(w=>isCurrentWeek(w))};
-    return renderSongCard(weekSong);
-  }).join('');
+  // Pasamos la canción completa con todas sus semanas
+  container.innerHTML=active.map(s=>renderSongCard(s)).join('');
 }
 
 function renderSidebar(){
@@ -705,7 +723,6 @@ function jumpTo(id){
   },80);
 }
 
-// ── HISTÓRICO — con botón Nueva semana ───────────────────────────────
 function renderHistory(){
   const q=(document.getElementById('histSearch').value||'').toLowerCase();
   const fA=document.getElementById('filterArtist').value,fW=document.getElementById('filterWeek').value;
