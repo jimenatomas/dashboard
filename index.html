@@ -35,9 +35,43 @@ body{font-family:system-ui,sans-serif;background:#f5f5f0;color:#1a1a18;min-heigh
 .song-link.active{background:var(--c1l);color:var(--c1d);font-weight:500}
 .song-link-artist{font-weight:500;color:#1a1a18}
 .song-link-sep{color:var(--border);margin:0 4px}
-.song-card{background:var(--card);border:0.5px solid var(--border);border-radius:12px;margin-bottom:1rem;overflow:hidden}
-.song-card-header{padding:1rem 1.25rem;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;cursor:pointer;user-select:none}
-.song-card-header:hover{background:#fafaf8}
+
+/* ── DRAG & DROP ──────────────────────────────────────────── */
+.drag-handle{
+  cursor:grab;padding:6px 4px;color:var(--muted);
+  display:inline-flex;align-items:center;flex-shrink:0;
+  border-radius:6px;transition:background .15s,color .15s;
+  touch-action:none; /* para móvil */
+}
+.drag-handle:hover{background:var(--surface);color:#1a1a18}
+.drag-handle:active{cursor:grabbing}
+
+.song-card{
+  background:var(--card);border:0.5px solid var(--border);
+  border-radius:12px;margin-bottom:1rem;overflow:hidden;
+  transition:box-shadow .2s, opacity .2s, transform .15s;
+  position:relative;
+}
+/* Tarjeta que se está arrastrando */
+.song-card.dragging{
+  opacity:.5;
+  box-shadow:0 8px 24px rgba(127,119,221,.25);
+  transform:scale(1.01);
+}
+/* Zona de drop activa: línea morada encima/debajo */
+.song-card.drag-over-top::before{
+  content:'';position:absolute;top:-3px;left:0;right:0;
+  height:3px;background:var(--c1);border-radius:2px;z-index:10;
+}
+.song-card.drag-over-bottom::after{
+  content:'';position:absolute;bottom:-3px;left:0;right:0;
+  height:3px;background:var(--c1);border-radius:2px;z-index:10;
+}
+/* ── FIN DRAG & DROP ──────────────────────────────────────── */
+
+.song-card-header{padding:1rem 1.25rem;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;user-select:none}
+.song-card-header-clickable{cursor:pointer}
+.song-card-header-clickable:hover{background:#fafaf8}
 .song-title-area{display:flex;align-items:center;gap:10px;flex:1;min-width:0}
 .song-avatar{width:42px;height:42px;border-radius:8px;background:var(--c1l);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;overflow:hidden}
 .song-meta{min-width:0}
@@ -77,7 +111,7 @@ body{font-family:system-ui,sans-serif;background:#f5f5f0;color:#1a1a18;min-heigh
 .week-accordion-header:hover{background:#e8e6df}
 .week-accordion-header .chevron{transition:transform .2s;font-size:14px}
 .week-accordion-header.open .chevron{transform:rotate(180deg)}
-.week-accordion-body{display:none;padding:1.25rem;border-top:0.5px solid var(--border);display:none;flex-direction:column;gap:1.25rem}
+.week-accordion-body{display:none;padding:1.25rem;flex-direction:column;gap:1.25rem}
 .week-accordion-body.open{display:flex}
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:100;padding:1rem}
 .modal{background:var(--card);border-radius:12px;padding:1.5rem;width:100%;max-width:560px;max-height:90vh;overflow-y:auto;border:0.5px solid var(--border)}
@@ -130,7 +164,6 @@ body{font-family:system-ui,sans-serif;background:#f5f5f0;color:#1a1a18;min-heigh
 .btn-notes-save{background:#C9A84C;color:#fff;border-color:#C9A84C;font-size:12px;padding:5px 12px}
 .btn-notes-save:hover{background:#a8893a}
 .btn-notes-cancel{font-size:12px;padding:5px 12px}
-/* Separador visual entre semana actual y semanas anteriores */
 .older-weeks-section{border-top:0.5px solid var(--border);padding-top:1rem;margin-top:.25rem}
 .older-weeks-label{font-size:11px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.5rem;display:flex;align-items:center;gap:6px}
 </style>
@@ -315,6 +348,7 @@ body{font-family:system-ui,sans-serif;background:#f5f5f0;color:#1a1a18;min-heigh
 let readOnly=false;
 let db=JSON.parse(localStorage.getItem('musicDB2')||'[]');
 let favorites=JSON.parse(localStorage.getItem('musicFavorites')||'[]');
+let sortOrder=JSON.parse(localStorage.getItem('musicSortOrder')||'[]'); // ← orden drag & drop
 let currentView='weekly';
 let pendingSongId=null,pendingWeekId=null;
 let pendingSpotify=null,pendingTikTok=null;
@@ -323,9 +357,130 @@ const charts={};
 
 function save(){if(!readOnly)localStorage.setItem('musicDB2',JSON.stringify(db))}
 function saveFavs(){if(!readOnly)localStorage.setItem('musicFavorites',JSON.stringify(favorites))}
+function saveSortOrder(){if(!readOnly)localStorage.setItem('musicSortOrder',JSON.stringify(sortOrder))}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2)}
 function fmtNum(n){if(!n&&n!==0)return'—';if(n>=1000000)return(n/1000000).toFixed(1)+'M';if(n>=1000)return Math.round(n/1000)+'k';return n.toString()}
 function isFav(id){return favorites.includes(id)}
+
+// ── Orden de canciones ────────────────────────────────────────────────
+// sortOrder es un array de IDs que define el orden de visualización.
+// Las canciones que no están en sortOrder se añaden al final.
+function getSortedSongs(songs){
+  const map=new Map(songs.map(s=>[s.id,s]));
+  const ordered=sortOrder.filter(id=>map.has(id)).map(id=>map.get(id));
+  const rest=songs.filter(s=>!sortOrder.includes(s.id));
+  return[...ordered,...rest];
+}
+function reorderSongs(fromId,toId,position){
+  // position: 'before' | 'after'
+  const allIds=getSortedSongs(db).map(s=>s.id);
+  const filtered=allIds.filter(id=>id!==fromId);
+  const toIdx=filtered.indexOf(toId);
+  const insertAt=position==='before'?toIdx:toIdx+1;
+  filtered.splice(insertAt,0,fromId);
+  sortOrder=filtered;
+  saveSortOrder();
+}
+
+// ── Drag & Drop state ─────────────────────────────────────────────────
+let dragSrcId=null;
+
+function onDragStart(e,songId){
+  dragSrcId=songId;
+  e.dataTransfer.effectAllowed='move';
+  e.dataTransfer.setData('text/plain',songId);
+  // pequeño delay para que el estilo se aplique después del snapshot
+  requestAnimationFrame(()=>{
+    const card=document.getElementById('card-'+songId);
+    if(card)card.classList.add('dragging');
+  });
+}
+function onDragEnd(e,songId){
+  dragSrcId=null;
+  document.querySelectorAll('.song-card').forEach(c=>{
+    c.classList.remove('dragging','drag-over-top','drag-over-bottom');
+  });
+}
+function onDragOver(e,songId){
+  e.preventDefault();
+  e.dataTransfer.dropEffect='move';
+  if(!dragSrcId||dragSrcId===songId)return;
+  const card=document.getElementById('card-'+songId);
+  if(!card)return;
+  // Detectar si el cursor está en la mitad superior o inferior de la tarjeta
+  const rect=card.getBoundingClientRect();
+  const midY=rect.top+rect.height/2;
+  document.querySelectorAll('.song-card').forEach(c=>c.classList.remove('drag-over-top','drag-over-bottom'));
+  card.classList.add(e.clientY<midY?'drag-over-top':'drag-over-bottom');
+}
+function onDragLeave(e,songId){
+  const card=document.getElementById('card-'+songId);
+  if(card)card.classList.remove('drag-over-top','drag-over-bottom');
+}
+function onDrop(e,toId){
+  e.preventDefault();
+  if(!dragSrcId||dragSrcId===toId)return;
+  const card=document.getElementById('card-'+toId);
+  const position=card&&card.classList.contains('drag-over-top')?'before':'after';
+  reorderSongs(dragSrcId,toId,position);
+  document.querySelectorAll('.song-card').forEach(c=>c.classList.remove('drag-over-top','drag-over-bottom','dragging'));
+  renderAll();
+}
+
+// Touch drag (móvil) ──────────────────────────────────────────────────
+let touchDragId=null,touchClone=null,touchOffX=0,touchOffY=0;
+
+function onTouchStart(e,songId){
+  touchDragId=songId;
+  const touch=e.touches[0];
+  const card=document.getElementById('card-'+songId);
+  const rect=card.getBoundingClientRect();
+  touchOffX=touch.clientX-rect.left;
+  touchOffY=touch.clientY-rect.top;
+  // Clonar para seguir el dedo
+  touchClone=card.cloneNode(true);
+  touchClone.style.cssText=`position:fixed;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;opacity:.7;pointer-events:none;z-index:9999;border-radius:12px;box-shadow:0 8px 24px rgba(127,119,221,.3);transition:none`;
+  document.body.appendChild(touchClone);
+  card.style.opacity='.3';
+  e.preventDefault();
+}
+function onTouchMove(e){
+  if(!touchDragId||!touchClone)return;
+  const touch=e.touches[0];
+  touchClone.style.left=(touch.clientX-touchOffX)+'px';
+  touchClone.style.top=(touch.clientY-touchOffY)+'px';
+  // Highlight target
+  document.querySelectorAll('.song-card').forEach(c=>c.classList.remove('drag-over-top','drag-over-bottom'));
+  const el=document.elementFromPoint(touch.clientX,touch.clientY);
+  const targetCard=el?.closest('.song-card');
+  if(targetCard&&targetCard.id!=='card-'+touchDragId){
+    const rect=targetCard.getBoundingClientRect();
+    targetCard.classList.add(touch.clientY<rect.top+rect.height/2?'drag-over-top':'drag-over-bottom');
+  }
+  e.preventDefault();
+}
+function onTouchEnd(e){
+  if(!touchDragId)return;
+  const touch=e.changedTouches[0];
+  const el=document.elementFromPoint(touch.clientX,touch.clientY);
+  const targetCard=el?.closest('.song-card');
+  if(targetCard&&targetCard.id!=='card-'+touchDragId){
+    const toId=targetCard.id.replace('card-','');
+    const position=targetCard.classList.contains('drag-over-top')?'before':'after';
+    reorderSongs(touchDragId,toId,position);
+  }
+  // Limpiar
+  if(touchClone)touchClone.remove();
+  touchClone=null;
+  document.getElementById('card-'+touchDragId).style.opacity='';
+  touchDragId=null;
+  document.querySelectorAll('.song-card').forEach(c=>c.classList.remove('drag-over-top','drag-over-bottom'));
+  renderAll();
+}
+document.addEventListener('touchmove',onTouchMove,{passive:false});
+document.addEventListener('touchend',onTouchEnd);
+
+// ── Resto de funciones (igual que antes) ──────────────────────────────
 
 function getMondayOf(date){
   const d=new Date(date);d.setHours(0,0,0,0);
@@ -360,7 +515,6 @@ function autoWeek(val,hiddenId,labelId){
   document.getElementById(hiddenId).value=label;document.getElementById(labelId).textContent=`→ ${label}`;
 }
 
-// ── NOTAS ─────────────────────────────────────────────────────────────
 function renderNotesSection(songId){
   if(readOnly){
     const song=db.find(s=>s.id===songId);
@@ -399,7 +553,6 @@ function saveNotes(songId){
   cancelNotes(songId);showToast('Nota guardada');
 }
 
-// ── CSV ───────────────────────────────────────────────────────────────
 function parseSpotifyRows(rows){
   const hasSpotifyCol=rows.some(r=>parseInt(r['Spotify']||r['spotify']||0)>0);
   return rows.map(row=>({date:row['Date']||row['date']||'',streams:hasSpotifyCol?parseInt(row['Spotify']||row['spotify']||0)||0:parseInt(row['Total']||row['total']||0)||0})).filter(d=>d.date&&d.streams>0);
@@ -440,19 +593,16 @@ async function fetchCover(artist,song){
   const key=`cover_${artist}_${song}`,cached=sessionStorage.getItem(key);if(cached)return cached;
   try{const r=await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(artist+' '+song)}&media=music&limit=1`);const d=await r.json();const url=d.results?.[0]?.artworkUrl100?.replace('100x100','300x300')||'';sessionStorage.setItem(key,url);return url;}catch{return''}
 }
-
 function renderChart(canvasId,labels,values,color){
   if(charts[canvasId])charts[canvasId].destroy();
   const ctx=document.getElementById(canvasId)?.getContext('2d');if(!ctx)return;
   charts[canvasId]=new Chart(ctx,{type:'line',data:{labels,datasets:[{data:values,borderColor:color,backgroundColor:color+'22',fill:true,tension:.3,pointRadius:2,pointHoverRadius:5}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+fmtNum(c.raw)}}},scales:{x:{ticks:{font:{size:10},maxTicksLimit:7},grid:{display:false}},y:{ticks:{font:{size:10},callback:v=>fmtNum(v)},grid:{color:'#e2e0d833'}}}}});
 }
-
 function videosGrid(videos){
   if(!videos||!videos.length)return'';
   return`<div class="videos-grid">${videos.map(v=>{const m=v.match(/tiktok\.com\/@([^/]+)\/(video|photo)\/(\d+)/);return m?`<div class="video-thumb"><iframe src="https://www.tiktok.com/embed/v2/${m[3]}" allowfullscreen scrolling="no" allow="encrypted-media;autoplay"></iframe><a href="${v}" target="_blank" style="position:absolute;inset:0"><div class="video-overlay"><i class="ti ti-external-link"></i></div></a></div>`:`<a href="${v}" target="_blank" style="border:0.5px solid var(--border);border-radius:8px;padding:.5rem;font-size:12px;color:var(--c1);display:flex;align-items:center;gap:6px"><i class="ti ti-external-link"></i>${v.slice(0,40)}...</a>`;}).join('')}</div>`;
 }
 
-// ── SHARE ─────────────────────────────────────────────────────────────
 function encodePayload(payload){return'lz:'+LZString.compressToEncodedURIComponent(JSON.stringify(payload));}
 function decodePayload(encoded){
   if(encoded.startsWith('lz:')){return JSON.parse(LZString.decompressFromEncodedURIComponent(encoded.slice(3)));}
@@ -466,7 +616,7 @@ async function copyShareLink(payload){
     const r=await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(longUrl)}`);
     const short=await r.text();
     if(short.startsWith('https://')){navigator.clipboard.writeText(short).then(()=>showToast('Enlace copiado: '+short)).catch(()=>prompt('Copia este enlace:',short));}
-    else throw new Error('TinyURL error');
+    else throw new Error();
   }catch{navigator.clipboard.writeText(longUrl).then(()=>showToast('Enlace copiado (sin acortar)')).catch(()=>prompt('Copia este enlace:',longUrl));}
 }
 async function shareDashboard(){await copyShareLink({type:'dashboard',songs:db});}
@@ -501,7 +651,6 @@ function toggleFav(id){
   if(currentView==='favorites')renderFavorites();
   showToast(isFav(id)?'Añadido a Favoritos':'Eliminado de Favoritos');
 }
-
 function songLinks(song){
   let html='';
   if(song.insights)html+=`<a href="${song.insights}" target="_blank" style="font-size:11px;color:var(--c1);display:inline-flex;align-items:center;gap:3px;text-decoration:none" onclick="event.stopPropagation()"><i class="ti ti-external-link" style="font-size:11px"></i>Insights</a>`;
@@ -509,17 +658,14 @@ function songLinks(song){
   return html;
 }
 
-// ── BORRAR SEMANA INDIVIDUAL (1) ──────────────────────────────────────
-function deleteWeekFromCard(songId, weekId){
+function deleteWeekFromCard(songId,weekId){
   if(readOnly)return;
   if(!confirm('¿Eliminar esta semana? La canción no se borrará.'))return;
   const s=db.find(x=>x.id===songId);if(!s)return;
-  s.weeks=s.weeks.filter(w=>w.id!==weekId);
-  save();renderAll();
+  s.weeks=s.weeks.filter(w=>w.id!==weekId);save();renderAll();
 }
 
-// ── BLOQUE DE DATOS DE UNA SEMANA ─────────────────────────────────────
-function renderWeekData(w, songId){
+function renderWeekData(w,songId){
   const tags=(w.tags||[]).filter(Boolean);
   const videos=(w.videos||[]).filter(Boolean);
   const hasSpotify=w.spotifyData&&w.spotifyData.length>0;
@@ -533,7 +679,9 @@ function renderWeekData(w, songId){
     if(hasSpotify){const labels=w.spotifyData.map(d=>{const dt=new Date(d.date);return`${dt.getDate()}/${dt.getMonth()+1}`;});renderChart(spotChartId,labels,w.spotifyData.map(d=>d.streams),'#1DB954');}
     if(hasTikDaily){const labels=w.tiktokData.daily.map(d=>{const dt=new Date(d.date);return`${dt.getDate()}/${dt.getMonth()+1}`;});renderChart(tikChartId,labels,w.tiktokData.daily.map(d=>d.creations),'#ff0050');}
   },0);
-  const editBtn=readOnly?'':` <button class="btn" style="font-size:11px;padding:3px 8px" onclick="showWeekModal('${songId}','${w.id}')"><i class="ti ti-edit" style="font-size:11px"></i> Editar</button>`;
+  const weekBtns=readOnly?'':`
+    <button class="btn" style="font-size:11px;padding:3px 8px" onclick="showWeekModal('${songId}','${w.id}')"><i class="ti ti-edit" style="font-size:11px"></i> Editar</button>
+    <button class="btn" style="font-size:11px;padding:3px 8px;color:var(--danger)" onclick="deleteWeekFromCard('${songId}','${w.id}')"><i class="ti ti-trash" style="font-size:11px"></i> Eliminar semana</button>`;
   return`
     <div>
       <div class="section-label"><i class="ti ti-flame" style="font-size:14px;color:#BA7517"></i> Tendencia</div>
@@ -552,8 +700,8 @@ function renderWeekData(w, songId){
     <div>
       <div class="section-label"><i class="ti ti-brand-tiktok" style="font-size:14px;color:#ff0050"></i> Ejemplos</div>
       ${videos.length
-        ?`<div style="margin-bottom:.5rem;font-size:11px;font-weight:500;color:var(--muted);display:flex;align-items:center;justify-content:space-between"><span><i class="ti ti-calendar" style="font-size:12px;margin-right:4px"></i>${w.week}</span>${editBtn}</div>${videosGrid(videos)}`
-        :`<div class="no-data" style="display:flex;align-items:center;justify-content:space-between;padding:.6rem 1rem"><span>Sin vídeos</span>${editBtn}</div>`
+        ?`<div style="margin-bottom:.5rem;font-size:11px;font-weight:500;color:var(--muted);display:flex;align-items:center;justify-content:space-between"><span><i class="ti ti-calendar" style="font-size:12px;margin-right:4px"></i>${w.week}</span><div style="display:flex;gap:6px">${weekBtns}</div></div>${videosGrid(videos)}`
+        :`<div class="no-data" style="display:flex;align-items:center;justify-content:space-between;padding:.6rem 1rem"><span>Sin vídeos</span><div style="display:flex;gap:6px">${weekBtns}</div></div>`
       }
     </div>`;
 }
@@ -564,7 +712,6 @@ function renderSongCard(song){
   if(!latest)return'';
   const older=allWeeks.filter(w=>w.id!==latest.id);
   const covId=`cover-${song.id}`;
-
   setTimeout(async()=>{
     const url=await fetchCover(song.artist,song.song);
     const el=document.getElementById(covId);
@@ -577,7 +724,18 @@ function renderSongCard(song){
     <button class="btn" style="padding:5px 10px;font-size:12px" onclick="event.stopPropagation();showSongEditModal('${song.id}')"><i class="ti ti-edit"></i></button>
     <button class="btn" style="padding:5px 10px;font-size:12px;color:var(--danger)" onclick="event.stopPropagation();deleteSong('${song.id}')"><i class="ti ti-trash"></i></button>`;
 
-  // (2) Semanas anteriores como acordeones independientes con botones editar + borrar
+  // Handle de drag — solo visible en modo edición
+  const dragHandleHtml=readOnly?'':`
+    <div class="drag-handle"
+      draggable="true"
+      onmousedown="event.stopPropagation()"
+      ondragstart="onDragStart(event,'${song.id}')"
+      ondragend="onDragEnd(event,'${song.id}')"
+      ontouchstart="onTouchStart(event,'${song.id}')"
+      title="Arrastrar para reordenar">
+      <i class="ti ti-grip-vertical" style="font-size:16px"></i>
+    </div>`;
+
   const olderHtml=older.length?`
     <div class="older-weeks-section">
       <div class="older-weeks-label"><i class="ti ti-history" style="font-size:13px"></i> Semanas anteriores</div>
@@ -592,30 +750,36 @@ function renderSongCard(song){
             </div>
           </div>
           <div class="week-accordion-body">
-            ${renderWeekData(w, song.id)}
+            ${renderWeekData(w,song.id)}
           </div>
         </div>`).join('')}
     </div>`:'';
 
   return`
-  <div class="song-card" id="card-${song.id}">
-    <div class="song-card-header" onclick="toggleCard('body-${song.id}','${song.id}')">
-      <div class="song-title-area">
-        <div class="song-avatar" id="${covId}">🎵</div>
-        <div class="song-meta">
-          <div class="song-name">${song.song}</div>
-          <div class="song-artist"><span>${song.artist}</span>${songLinks(song)}</div>
+  <div class="song-card" id="card-${song.id}"
+    ondragover="onDragOver(event,'${song.id}')"
+    ondragleave="onDragLeave(event,'${song.id}')"
+    ondrop="onDrop(event,'${song.id}')">
+    <div class="song-card-header">
+      ${dragHandleHtml}
+      <div class="song-card-header-clickable" style="display:flex;align-items:center;gap:12px;flex:1;flex-wrap:wrap;padding:0" onclick="toggleCard('body-${song.id}','${song.id}')">
+        <div class="song-title-area">
+          <div class="song-avatar" id="${covId}">🎵</div>
+          <div class="song-meta">
+            <div class="song-name">${song.song}</div>
+            <div class="song-artist"><span>${song.artist}</span>${songLinks(song)}</div>
+          </div>
         </div>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        ${starBtn(song.id)}
-        <span class="tag tag-week"><i class="ti ti-calendar" style="font-size:11px"></i>${latest.week||'—'}</span>
-        ${editBtns}
-        <i class="ti ti-chevron-down" id="chevron-${song.id}" style="font-size:16px;color:var(--muted);transition:transform .2s"></i>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          ${starBtn(song.id)}
+          <span class="tag tag-week"><i class="ti ti-calendar" style="font-size:11px"></i>${latest.week||'—'}</span>
+          ${editBtns}
+          <i class="ti ti-chevron-down" id="chevron-${song.id}" style="font-size:16px;color:var(--muted);transition:transform .2s"></i>
+        </div>
       </div>
     </div>
     <div class="song-card-body hidden" id="body-${song.id}">
-      ${renderWeekData(latest, song.id)}
+      ${renderWeekData(latest,song.id)}
       ${olderHtml}
       ${renderNotesSection(song.id)}
     </div>
@@ -629,11 +793,7 @@ function toggleCard(bodyId,songId){
   document.querySelectorAll('.song-link').forEach(l=>l.classList.remove('active'));
   if(!isOpen){const link=document.querySelector(`.song-link[data-id="${songId}"]`);if(link)link.classList.add('active');}
 }
-function toggleAccordion(header){
-  header.classList.toggle('open');
-  const body=header.nextElementSibling;
-  body.classList.toggle('open');
-}
+function toggleAccordion(header){header.classList.toggle('open');header.nextElementSibling.classList.toggle('open');}
 
 function showToast(msg){
   let t=document.getElementById('toast');
@@ -678,16 +838,18 @@ function viewWeek(songId,weekId){
 function renderWeekly(){
   document.getElementById('weekLabel').textContent=getCurrentWeekLabel();
   const active=db.filter(s=>(s.weeks||[]).some(w=>isCurrentWeek(w)));
+  const sorted=getSortedSongs(active);
   const container=document.getElementById('songCards'),empty=document.getElementById('emptyState');
-  if(!active.length){container.innerHTML='';empty.classList.remove('hidden');return;}
+  if(!sorted.length){container.innerHTML='';empty.classList.remove('hidden');return;}
   empty.classList.add('hidden');
-  container.innerHTML=active.map(s=>renderSongCard(s)).join('');
+  container.innerHTML=sorted.map(s=>renderSongCard(s)).join('');
 }
 
 function renderSidebar(){
   const q=(document.getElementById('sidebarSearch').value||'').toLowerCase();
   const active=db.filter(s=>(s.weeks||[]).some(w=>isCurrentWeek(w)));
-  const filtered=active.filter(s=>!q||s.artist.toLowerCase().includes(q)||s.song.toLowerCase().includes(q));
+  const sorted=getSortedSongs(active);
+  const filtered=sorted.filter(s=>!q||s.artist.toLowerCase().includes(q)||s.song.toLowerCase().includes(q));
   let html='';
   filtered.forEach(s=>{html+=`<span class="song-link" data-id="${s.id}" onclick="jumpTo('${s.id}')"><span class="song-link-artist">${s.artist}</span><span class="song-link-sep">·</span>${s.song}</span>`;});
   document.getElementById('artistTree').innerHTML=html||`<p style="font-size:12px;color:var(--muted);padding:.5rem 8px">Sin canciones esta semana</p>`;
@@ -854,7 +1016,9 @@ function saveWeek(){
 function deleteSong(id){
   if(readOnly)return;
   if(!confirm('¿Eliminar esta canción y todas sus semanas?'))return;
-  db=db.filter(s=>s.id!==id);favorites=favorites.filter(f=>f!==id);save();saveFavs();renderAll();
+  db=db.filter(s=>s.id!==id);favorites=favorites.filter(f=>f!==id);
+  sortOrder=sortOrder.filter(sid=>sid!==id);
+  save();saveFavs();saveSortOrder();renderAll();
 }
 
 function addUrlField(listId,val=''){
